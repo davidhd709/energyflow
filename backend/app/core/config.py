@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     MONGODB_DB_NAME: str = 'energyflow'
 
     CORS_ORIGINS: str = 'http://localhost:3000'
+    CORS_ORIGIN_REGEX: str | None = r'https://.*\.vercel\.app'
 
     @staticmethod
     def _strip_wrapping_quotes(value: str) -> str:
@@ -36,6 +37,7 @@ class Settings(BaseSettings):
         'MONGODB_URI',
         'MONGODB_DB_NAME',
         'CORS_ORIGINS',
+        'CORS_ORIGIN_REGEX',
         mode='before',
     )
     @classmethod
@@ -43,6 +45,14 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return cls._strip_wrapping_quotes(value)
         return value
+
+    @field_validator('CORS_ORIGIN_REGEX', mode='before')
+    @classmethod
+    def normalize_cors_regex(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = cls._strip_wrapping_quotes(value) if isinstance(value, str) else str(value)
+        return cleaned or None
 
     @field_validator('ACCESS_TOKEN_EXPIRE_MINUTES', mode='before')
     @classmethod
