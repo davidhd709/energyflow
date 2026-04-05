@@ -1,6 +1,6 @@
 import { getSession } from '@/lib/auth';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace(/\/+$/, '');
 
 function normalizeError(detail: unknown): string {
   if (typeof detail === 'string') return detail;
@@ -26,10 +26,17 @@ export async function apiFetch<T>(
     }
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers
+    });
+  } catch {
+    throw new Error(
+      `No se pudo conectar al backend. Verifica NEXT_PUBLIC_API_URL y CORS_ORIGINS. API actual: ${API_URL}`
+    );
+  }
 
   if (!response.ok) {
     let detail: unknown = 'Error de API';
