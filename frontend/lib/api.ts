@@ -1,10 +1,11 @@
 import { getSession } from '@/lib/auth';
 
 const RAW_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-const API_URL = RAW_API_URL
+const BACKEND_API_URL = RAW_API_URL
   .replace(/^NEXT_PUBLIC_API_URL\s*=\s*/i, '')
   .replace(/^['"]|['"]$/g, '')
   .replace(/\/+$/, '');
+const API_URL = '/api/proxy';
 
 function normalizeError(detail: unknown): string {
   if (typeof detail === 'string') return detail;
@@ -38,7 +39,7 @@ export async function apiFetch<T>(
     });
   } catch {
     throw new Error(
-      `No se pudo conectar al backend. Verifica NEXT_PUBLIC_API_URL y CORS_ORIGINS. API actual: ${API_URL}`
+      `No se pudo conectar al backend. Verifica NEXT_PUBLIC_API_URL y CORS_ORIGINS. API actual: ${BACKEND_API_URL}`
     );
   }
 
@@ -46,7 +47,7 @@ export async function apiFetch<T>(
     let detail: unknown = 'Error de API';
     const raw = await response.text();
     const contentType = response.headers.get('content-type') || '';
-    const url = `${API_URL}${path}`;
+    const url = `${BACKEND_API_URL}${path}`;
 
     if (contentType.includes('text/html') || raw.trim().toLowerCase().startsWith('<!doctype html')) {
       throw new Error(

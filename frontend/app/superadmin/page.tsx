@@ -40,7 +40,10 @@ type UserRow = {
   activo?: boolean;
 };
 
-const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('/api/v1', '');
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1')
+  .replace(/^NEXT_PUBLIC_API_URL\s*=\s*/i, '')
+  .replace(/^['"]|['"]$/g, '')
+  .replace('/api/v1', '');
 
 export default function SuperadminPage(): React.ReactNode {
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
