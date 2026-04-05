@@ -40,11 +40,14 @@ export async function apiFetch<T>(
 
   if (!response.ok) {
     let detail: unknown = 'Error de API';
-    try {
-      const parsed = await response.json();
-      detail = parsed.detail || parsed;
-    } catch {
-      detail = await response.text();
+    const raw = await response.text();
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        detail = parsed?.detail || parsed;
+      } catch {
+        detail = raw;
+      }
     }
     throw new Error(normalizeError(detail));
   }
