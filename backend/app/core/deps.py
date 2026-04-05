@@ -16,7 +16,15 @@ USER_CACHE: dict[str, tuple[float, dict]] = {}
 
 async def get_db() -> AsyncIOMotorDatabase:
     if mongo.db is None:
-        raise HTTPException(status_code=500, detail='Database not initialized')
+        try:
+            await mongo.ensure_connected()
+        except Exception:
+            raise HTTPException(
+                status_code=503,
+                detail=f"No se pudo conectar a MongoDB. {mongo.last_error or ''}".strip(),
+            )
+    if mongo.db is None:
+        raise HTTPException(status_code=503, detail='Base de datos no disponible')
     return mongo.db
 
 
