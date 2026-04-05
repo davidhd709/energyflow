@@ -49,6 +49,11 @@ app.mount('/static', StaticFiles(directory=str(BASE_DIR / 'static')), name='stat
 app.include_router(api_router, prefix=settings.API_PREFIX)
 
 
+@app.get('/')
+async def root() -> dict:
+    return {'status': 'ok', 'service': settings.APP_NAME}
+
+
 @app.get('/health')
 async def health() -> dict:
     if mongo.client is None:
