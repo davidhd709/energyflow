@@ -1,6 +1,10 @@
 import { getSession } from '@/lib/auth';
 
-const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace(/\/+$/, '');
+const RAW_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+const API_URL = RAW_API_URL
+  .replace(/^NEXT_PUBLIC_API_URL\s*=\s*/i, '')
+  .replace(/^['"]|['"]$/g, '')
+  .replace(/\/+$/, '');
 
 function normalizeError(detail: unknown): string {
   if (typeof detail === 'string') return detail;
