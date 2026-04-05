@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.env.local
+node_modules/
+.next/
+*.log
+.DS_Store
+backend/static/pdfs/*.pdf

@@ -1,0 +1,7 @@
+# correr backend local
+
+python -m uvicorn app.main:app --reload --port 8000
+
+# correr frontend local
+
+npm run dev 
