@@ -41,6 +41,15 @@ export async function apiFetch<T>(
   if (!response.ok) {
     let detail: unknown = 'Error de API';
     const raw = await response.text();
+    const contentType = response.headers.get('content-type') || '';
+    const url = `${API_URL}${path}`;
+
+    if (contentType.includes('text/html') || raw.trim().toLowerCase().startsWith('<!doctype html')) {
+      throw new Error(
+        `El frontend recibió HTML (${response.status}) en lugar de JSON. Verifica NEXT_PUBLIC_API_URL. URL solicitada: ${url}`
+      );
+    }
+
     if (raw) {
       try {
         const parsed = JSON.parse(raw);
