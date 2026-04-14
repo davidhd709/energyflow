@@ -81,10 +81,14 @@ class BillingPeriodUpdate(BaseModel):
     estado: Optional[Literal['abierto', 'calculado', 'cerrado']] = None
 
 
+class BillingPeriodReopenRequest(BaseModel):
+    motivo: str = Field(..., min_length=8, max_length=500)
+
+
 class MeterReadingUpsert(BaseModel):
     billing_period_id: str
     house_id: str
-    lectura_anterior: float = Field(..., ge=0)
+    lectura_anterior: Optional[float] = Field(default=None, ge=0)
     lectura_actual: float = Field(..., ge=0)
     observaciones: Optional[str] = ''
 

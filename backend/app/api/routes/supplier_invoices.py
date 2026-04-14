@@ -49,6 +49,8 @@ async def upsert_supplier_invoice(
     period = await db.billing_periods.find_one({'_id': period_obj_id})
     if not period:
         raise HTTPException(status_code=404, detail='Periodo no encontrado')
+    if period.get('estado') == 'cerrado':
+        raise HTTPException(status_code=400, detail='El periodo está cerrado. Debe reabrirse para editar la factura global.')
 
     enforce_tenant_scope(current_user, str(period['condominium_id']))
 

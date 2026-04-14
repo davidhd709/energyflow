@@ -22,6 +22,7 @@ type Period = {
 export default function BillingPeriodsPage(): React.ReactNode {
   const { session } = useSession();
   const role = session?.user.rol;
+  const isSuperadmin = role === 'superadmin';
   const readOnly = false;
   const [periods, setPeriods] = useState<Period[]>([]);
   const [error, setError] = useState('');
@@ -77,22 +78,50 @@ export default function BillingPeriodsPage(): React.ReactNode {
     }
   };
 
+  const reopenPeriod = async (periodId: string): Promise<void> => {
+    const motivo = window.prompt('Escribe el motivo de reapertura del periodo:');
+    if (!motivo) return;
+
+    setLoadingAction(true);
+    setError('');
+    setSuccess('');
+    try {
+      await apiFetch(`/billing-periods/${periodId}/reopen`, {
+        method: 'POST',
+        body: JSON.stringify({ motivo })
+      });
+      setSuccess('Periodo reabierto con éxito.');
+      setRefreshFlag((value) => value + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo reabrir el periodo.');
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
   const rows = useMemo(
     () =>
       periods.map((period) => ({
         Periodo: `${period.fecha_inicio} - ${period.fecha_fin}`,
         Días: period.dias,
         Estado: period.estado,
-        Acción:
-          readOnly || period.estado === 'cerrado' ? (
-            '-'
+        Acción: readOnly ? (
+          '-'
+        ) : period.estado === 'cerrado' ? (
+          isSuperadmin ? (
+            <button className="rounded bg-amber-600 px-2 py-1 text-xs text-white transition hover:bg-amber-700" onClick={() => reopenPeriod(period._id)}>
+              Reabrir
+            </button>
           ) : (
+            '-'
+          )
+        ) : (
             <button className="rounded bg-pine-700 px-2 py-1 text-xs text-white transition hover:bg-pine-800" onClick={() => closePeriod(period._id)}>
               Cerrar
             </button>
           )
       })),
-    [periods, readOnly]
+    [isSuperadmin, periods, readOnly]
   );
 
   return (

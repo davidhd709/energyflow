@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import AppShell from '@/components/AppShell';
 import ActionFeedback from '@/components/ActionFeedback';
@@ -33,6 +33,11 @@ type Reading = {
   consumo: number;
   observaciones: string;
   foto_medidor_url?: string | null;
+};
+
+type PrefillReading = {
+  lectura_anterior: number;
+  source: 'actual' | 'periodo_anterior' | 'historico' | 'default';
 };
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1')
@@ -127,12 +132,18 @@ export default function MeterReadingsPage(): React.ReactNode {
   const [notice, setNotice] = useState('');
   const [loadingAction, setLoadingAction] = useState(false);
   const [refreshFlag, setRefreshFlag] = useState(0);
+  const [loadingPrefill, setLoadingPrefill] = useState(false);
+  const [lecturaAnteriorAuto, setLecturaAnteriorAuto] = useState<number>(0);
+  const [prefillSource, setPrefillSource] = useState<PrefillReading['source']>('default');
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoCrop, setPhotoCrop] = useState<PhotoCrop | null>(null);
   const [photoInputKey, setPhotoInputKey] = useState(0);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraError, setCameraError] = useState('');
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [form, setForm] = useState({
     house_id: '',
-    lectura_anterior: 0,
     lectura_actual: 0,
     observaciones: ''
   });
@@ -162,6 +173,18 @@ export default function MeterReadingsPage(): React.ReactNode {
       .then(setReadings)
       .catch((err) => setError(err.message));
   }, [refreshFlag, selectedPeriod]);
+
+  useEffect(() => {
+    if (!selectedPeriod || !form.house_id) return;
+    setLoadingPrefill(true);
+    apiFetch<PrefillReading>(`/meter-readings/prefill?billing_period_id=${selectedPeriod}&house_id=${form.house_id}`)
+      .then((data) => {
+        setLecturaAnteriorAuto(Number(data.lectura_anterior || 0));
+        setPrefillSource(data.source || 'default');
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoadingPrefill(false));
+  }, [form.house_id, selectedPeriod, refreshFlag]);
 
   const cropArea = useMemo(() => (photoCrop ? computeCropArea(photoCrop) : null), [photoCrop]);
 
@@ -200,6 +223,80 @@ export default function MeterReadingsPage(): React.ReactNode {
     reader.readAsDataURL(file);
   };
 
+  const stopCamera = (): void => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setCameraOpen(false);
+  };
+
+  const openCamera = async (): Promise<void> => {
+    setCameraError('');
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('Este navegador no permite acceso a cámara.');
+      }
+      stopCamera();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false
+      });
+      streamRef.current = stream;
+      setCameraOpen(true);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+    } catch (err) {
+      setCameraError(err instanceof Error ? err.message : 'No se pudo activar la cámara.');
+      stopCamera();
+    }
+  };
+
+  const captureFromCamera = async (): Promise<void> => {
+    if (!videoRef.current) {
+      setCameraError('La cámara no está lista.');
+      return;
+    }
+
+    const video = videoRef.current;
+    const width = video.videoWidth || 1280;
+    const height = video.videoHeight || 720;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      setCameraError('No se pudo capturar la imagen.');
+      return;
+    }
+
+    ctx.drawImage(video, 0, 0, width, height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+    if (!blob) {
+      setCameraError('No se pudo capturar la foto del medidor.');
+      return;
+    }
+
+    const file = new File([blob], `camera_${Date.now()}.jpg`, { type: 'image/jpeg' });
+    onPhotoSelected(file);
+    stopCamera();
+  };
+
+  useEffect(
+    () => () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
+    },
+    []
+  );
+
   const saveReading = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     setLoadingAction(true);
@@ -212,7 +309,6 @@ export default function MeterReadingsPage(): React.ReactNode {
         body: JSON.stringify({
           ...form,
           billing_period_id: selectedPeriod,
-          lectura_anterior: Number(form.lectura_anterior),
           lectura_actual: Number(form.lectura_actual)
         })
       });
@@ -318,7 +414,18 @@ export default function MeterReadingsPage(): React.ReactNode {
                 </label>
                 <label className="text-sm text-pine-700">
                   Lectura anterior
-                  <input className="mt-1 w-full rounded-xl px-3 py-2.5" type="number" min={0} step="0.01" value={form.lectura_anterior} onChange={(e) => setForm({ ...form, lectura_anterior: Number(e.target.value) })} required />
+                  <input className="mt-1 w-full rounded-xl bg-slate-50 px-3 py-2.5" type="number" min={0} step="0.01" value={lecturaAnteriorAuto} readOnly />
+                  <span className="mt-1 block text-xs text-pine-600">
+                    {loadingPrefill
+                      ? 'Buscando lectura anterior...'
+                      : prefillSource === 'periodo_anterior'
+                        ? 'Tomada automáticamente del periodo anterior.'
+                        : prefillSource === 'actual'
+                          ? 'Lectura anterior del registro actual.'
+                          : prefillSource === 'historico'
+                            ? 'Tomada del último histórico disponible.'
+                            : 'Sin histórico previo: se usará 0.00.'}
+                  </span>
                 </label>
                 <label className="text-sm text-pine-700">
                   Lectura actual
@@ -330,16 +437,41 @@ export default function MeterReadingsPage(): React.ReactNode {
                 </label>
               </div>
 
-              <label className="text-sm text-pine-700">
-                Foto del medidor (JPG, PNG, WEBP)
-                <input
-                  key={photoInputKey}
-                  className="mt-1 w-full rounded-xl bg-white px-3 py-2.5"
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  onChange={(e) => onPhotoSelected(e.target.files?.[0] || null)}
-                />
-              </label>
+              <div className="rounded-2xl border border-pine-200 bg-pine-50 p-3">
+                <p className="text-sm font-semibold text-pine-900">Foto del medidor</p>
+                <p className="text-xs text-pine-700">Puedes subir archivo o tomar foto con cámara antes de recortar.</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <label className="inline-flex cursor-pointer items-center rounded-xl bg-white px-3 py-2 text-sm text-pine-800 shadow-sm ring-1 ring-pine-200">
+                    Subir archivo
+                    <input
+                      key={photoInputKey}
+                      className="hidden"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={(e) => onPhotoSelected(e.target.files?.[0] || null)}
+                    />
+                  </label>
+                  <button type="button" className="rounded-xl bg-pine-700 px-3 py-2 text-sm font-semibold text-white" onClick={openCamera}>
+                    Activar cámara
+                  </button>
+                  {cameraOpen ? (
+                    <button type="button" className="rounded-xl bg-slate-200 px-3 py-2 text-sm font-semibold text-slate-800" onClick={stopCamera}>
+                      Cerrar cámara
+                    </button>
+                  ) : null}
+                </div>
+                {cameraError ? <p className="mt-2 text-xs text-red-600">{cameraError}</p> : null}
+                {cameraOpen ? (
+                  <div className="mt-3 space-y-2">
+                    <div className="overflow-hidden rounded-lg border border-pine-300 bg-black">
+                      <video ref={videoRef} className="h-auto w-full" autoPlay playsInline muted />
+                    </div>
+                    <button type="button" className="rounded-xl bg-emerald-700 px-3 py-2 text-sm font-semibold text-white" onClick={captureFromCamera}>
+                      Capturar foto
+                    </button>
+                  </div>
+                ) : null}
+              </div>
 
               {photoCrop && cropArea ? (
                 <div className="rounded-2xl border border-pine-200 bg-pine-50 p-3">

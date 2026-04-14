@@ -52,6 +52,9 @@ async def calculate_billing(
     condominium = scoped['condominium']
     condominium_obj_id = to_object_id(period['condominium_id'], 'condominium_id')
 
+    if period.get('estado') == 'cerrado':
+        raise HTTPException(status_code=400, detail='El periodo está cerrado. Debe reabrirse para recalcular.')
+
     supplier_invoice = await db.supplier_invoices.find_one({'billing_period_id': period_obj_id})
     if not supplier_invoice:
         raise HTTPException(status_code=400, detail='No existe factura global del proveedor para este periodo')

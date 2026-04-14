@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.deps import enforce_tenant_scope, get_db, get_current_user, require_roles
-from app.schemas import BillingPeriodCreate, BillingPeriodUpdate
+from app.schemas import BillingPeriodCreate, BillingPeriodReopenRequest, BillingPeriodUpdate
 from app.services.audit_service import log_audit
 from app.utils.object_id import serialize_doc, to_object_id
 
@@ -101,6 +101,12 @@ async def update_period(
 
     enforce_tenant_scope(current_user, str(period['condominium_id']))
 
+    if period.get('estado') == 'cerrado':
+        raise HTTPException(
+            status_code=400,
+            detail='El periodo está cerrado. Solo superadmin puede reabrirlo con motivo para permitir ediciones.',
+        )
+
     updates = {k: v for k, v in payload.model_dump().items() if v is not None}
     if not updates:
         raise HTTPException(status_code=400, detail='No hay campos para actualizar')
@@ -151,6 +157,9 @@ async def close_period(
     condo_id = str(period['condominium_id'])
     enforce_tenant_scope(current_user, condo_id)
 
+    if period.get('estado') == 'cerrado':
+        raise HTTPException(status_code=400, detail='El periodo ya está cerrado')
+
     houses = await db.houses.find({'condominium_id': period['condominium_id'], 'activo': True}).to_list(length=None)
     readings = await db.meter_readings.find({'billing_period_id': period_obj_id}).to_list(length=None)
     reading_house_ids = {str(reading['house_id']) for reading in readings}
@@ -184,3 +193,54 @@ async def close_period(
     )
 
     return {'message': 'Periodo cerrado exitosamente'}
+
+
+@router.post('/{billing_period_id}/reopen')
+async def reopen_period(
+    billing_period_id: str,
+    payload: BillingPeriodReopenRequest,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: dict = Depends(require_roles('superadmin')),
+) -> dict:
+    try:
+        period_obj_id = to_object_id(billing_period_id, 'billing_period_id')
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail='billing_period_id inválido') from exc
+
+    period = await db.billing_periods.find_one({'_id': period_obj_id})
+    if not period:
+        raise HTTPException(status_code=404, detail='Periodo no encontrado')
+
+    enforce_tenant_scope(current_user, str(period['condominium_id']))
+
+    if period.get('estado') != 'cerrado':
+        raise HTTPException(status_code=400, detail='Solo se pueden reabrir periodos cerrados')
+
+    now = datetime.now(timezone.utc)
+    await db.billing_periods.update_one(
+        {'_id': period_obj_id},
+        {
+            '$set': {
+                'estado': 'abierto',
+                'updated_at': now,
+            },
+            '$push': {
+                'reopen_history': {
+                    'motivo': payload.motivo.strip(),
+                    'reopened_by': current_user['_id'],
+                    'timestamp': now,
+                }
+            },
+        },
+    )
+
+    await log_audit(
+        db,
+        user_id=current_user['_id'],
+        action='reopen',
+        entity='billing_periods',
+        entity_id=billing_period_id,
+        detail={'motivo': payload.motivo.strip()},
+    )
+
+    return {'message': 'Periodo reabierto exitosamente'}

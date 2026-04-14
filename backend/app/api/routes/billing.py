@@ -16,6 +16,32 @@ router = APIRouter()
 BASE_DIR = Path(__file__).resolve().parents[3]
 
 
+async def _with_admin_support_email(db: AsyncIOMotorDatabase, condominium: dict) -> dict:
+    condo_id = condominium.get('_id') or condominium.get('id') or condominium.get('condominium_id')
+    if not condo_id:
+        return condominium
+
+    try:
+        condo_obj_id = to_object_id(str(condo_id), 'condominium_id')
+    except ValueError:
+        return condominium
+
+    admin_user = await db.users.find_one(
+        {
+            'rol': 'admin',
+            'condominium_id': condo_obj_id,
+            'activo': {'$ne': False},
+        },
+        sort=[('created_at', 1)],
+    )
+    if not admin_user or not admin_user.get('email'):
+        return condominium
+
+    enriched = {**condominium}
+    enriched['email_contacto'] = admin_user['email']
+    return enriched
+
+
 @router.post('/{billing_period_id}/calculate')
 async def run_calculation(
     billing_period_id: str,
@@ -89,7 +115,8 @@ async def generate_house_invoice_pdf(
     invoice_doc['fecha_lectura_anterior'] = period_doc.get('fecha_inicio')
     invoice_doc['dias_facturados'] = period_doc.get('dias', 0)
 
-    pdf_url = save_invoice_pdf(invoice_doc, house_doc, period_doc, scoped['condominium'])
+    condo_for_pdf = await _with_admin_support_email(db, scoped['condominium'])
+    pdf_url = save_invoice_pdf(invoice_doc, house_doc, period_doc, condo_for_pdf)
 
     await db.house_invoices.update_one(
         {'_id': invoice_obj_id},
@@ -120,6 +147,7 @@ async def generate_all_pdfs(
     current_user: dict = Depends(require_roles('superadmin', 'operador')),
 ) -> dict:
     scoped = await load_period_scoped(db, billing_period_id, current_user)
+    condo_for_pdf = await _with_admin_support_email(db, scoped['condominium'])
 
     invoices = await db.house_invoices.find({'billing_period_id': scoped['period_obj_id']}).to_list(length=None)
     if not invoices:
@@ -147,7 +175,7 @@ async def generate_all_pdfs(
         invoice_doc['fecha_lectura_anterior'] = scoped['period'].get('fecha_inicio')
         invoice_doc['dias_facturados'] = scoped['period'].get('dias', 0)
 
-        pdf_url = save_invoice_pdf(invoice_doc, house_doc, scoped['period'], scoped['condominium'])
+        pdf_url = save_invoice_pdf(invoice_doc, house_doc, scoped['period'], condo_for_pdf)
 
         await db.house_invoices.update_one(
             {'_id': invoice['_id']},
@@ -223,7 +251,8 @@ async def download_house_invoice_pdf(
         invoice_doc['fecha_lectura_anterior'] = period_doc.get('fecha_inicio')
         invoice_doc['dias_facturados'] = period_doc.get('dias', 0)
 
-        pdf_url = save_invoice_pdf(invoice_doc, house_doc, period_doc, scoped['condominium'])
+        condo_for_pdf = await _with_admin_support_email(db, scoped['condominium'])
+        pdf_url = save_invoice_pdf(invoice_doc, house_doc, period_doc, condo_for_pdf)
         await db.house_invoices.update_one(
             {'_id': invoice_obj_id},
             {

@@ -12,6 +12,41 @@ from app.utils.object_id import serialize_doc, to_object_id
 router = APIRouter()
 
 
+async def _resolve_previous_reading(
+    db: AsyncIOMotorDatabase,
+    *,
+    period: dict,
+    period_obj_id,
+    house_obj_id,
+) -> tuple[float, str]:
+    existing_current = await db.meter_readings.find_one({'billing_period_id': period_obj_id, 'house_id': house_obj_id})
+    if existing_current and existing_current.get('lectura_anterior') is not None:
+        return float(existing_current['lectura_anterior']), 'actual'
+
+    previous_period = await db.billing_periods.find_one(
+        {
+            'condominium_id': period['condominium_id'],
+            'fecha_fin': {'$lt': period['fecha_inicio']},
+        },
+        sort=[('fecha_fin', -1)],
+    )
+    if previous_period:
+        previous_reading = await db.meter_readings.find_one(
+            {
+                'billing_period_id': previous_period['_id'],
+                'house_id': house_obj_id,
+            }
+        )
+        if previous_reading and previous_reading.get('lectura_actual') is not None:
+            return float(previous_reading['lectura_actual']), 'periodo_anterior'
+
+    latest_reading = await db.meter_readings.find_one({'house_id': house_obj_id}, sort=[('updated_at', -1), ('created_at', -1)])
+    if latest_reading and latest_reading.get('lectura_actual') is not None:
+        return float(latest_reading['lectura_actual']), 'historico'
+
+    return 0.0, 'default'
+
+
 @router.get('')
 async def list_readings(
     billing_period_id: str = Query(...),
@@ -33,18 +68,16 @@ async def list_readings(
     return serialize_doc(readings)
 
 
-@router.put('')
-async def upsert_reading(
-    payload: MeterReadingUpsert,
+@router.get('/prefill')
+async def prefill_reading(
+    billing_period_id: str = Query(...),
+    house_id: str = Query(...),
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: dict = Depends(require_roles('superadmin', 'operador')),
+    current_user: dict = Depends(get_current_user),
 ) -> dict:
-    if payload.lectura_actual < payload.lectura_anterior:
-        raise HTTPException(status_code=400, detail='lectura_actual debe ser mayor o igual a lectura_anterior')
-
     try:
-        period_obj_id = to_object_id(payload.billing_period_id, 'billing_period_id')
-        house_obj_id = to_object_id(payload.house_id, 'house_id')
+        period_obj_id = to_object_id(billing_period_id, 'billing_period_id')
+        house_obj_id = to_object_id(house_id, 'house_id')
     except ValueError as exc:
         raise HTTPException(status_code=400, detail='IDs inválidos') from exc
 
@@ -61,7 +94,59 @@ async def upsert_reading(
 
     enforce_tenant_scope(current_user, str(period['condominium_id']))
 
-    consumo = payload.lectura_actual - payload.lectura_anterior
+    lectura_anterior, source = await _resolve_previous_reading(
+        db,
+        period=period,
+        period_obj_id=period_obj_id,
+        house_obj_id=house_obj_id,
+    )
+
+    return {
+        'lectura_anterior': lectura_anterior,
+        'source': source,
+    }
+
+
+@router.put('')
+async def upsert_reading(
+    payload: MeterReadingUpsert,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: dict = Depends(require_roles('superadmin', 'operador')),
+) -> dict:
+    try:
+        period_obj_id = to_object_id(payload.billing_period_id, 'billing_period_id')
+        house_obj_id = to_object_id(payload.house_id, 'house_id')
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail='IDs inválidos') from exc
+
+    period = await db.billing_periods.find_one({'_id': period_obj_id})
+    if not period:
+        raise HTTPException(status_code=404, detail='Periodo no encontrado')
+    if period.get('estado') == 'cerrado':
+        raise HTTPException(status_code=400, detail='El periodo está cerrado. Debe reabrirse para editar lecturas.')
+
+    house = await db.houses.find_one({'_id': house_obj_id})
+    if not house:
+        raise HTTPException(status_code=404, detail='Casa no encontrada')
+
+    if house['condominium_id'] != period['condominium_id']:
+        raise HTTPException(status_code=400, detail='La casa no pertenece al condominio del periodo')
+
+    enforce_tenant_scope(current_user, str(period['condominium_id']))
+
+    lectura_anterior = payload.lectura_anterior
+    if lectura_anterior is None:
+        lectura_anterior, _ = await _resolve_previous_reading(
+            db,
+            period=period,
+            period_obj_id=period_obj_id,
+            house_obj_id=house_obj_id,
+        )
+
+    if payload.lectura_actual < lectura_anterior:
+        raise HTTPException(status_code=400, detail='lectura_actual debe ser mayor o igual a lectura_anterior')
+
+    consumo = payload.lectura_actual - lectura_anterior
     if consumo < 0:
         raise HTTPException(status_code=400, detail='Consumo negativo detectado')
 
@@ -69,7 +154,7 @@ async def upsert_reading(
     doc = {
         'billing_period_id': period_obj_id,
         'house_id': house_obj_id,
-        'lectura_anterior': payload.lectura_anterior,
+        'lectura_anterior': lectura_anterior,
         'lectura_actual': payload.lectura_actual,
         'consumo': consumo,
         'observaciones': payload.observaciones or '',
@@ -125,6 +210,8 @@ async def upload_meter_photo(
     period = await db.billing_periods.find_one({'_id': reading['billing_period_id']})
     if not period:
         raise HTTPException(status_code=404, detail='Periodo no encontrado')
+    if period.get('estado') == 'cerrado':
+        raise HTTPException(status_code=400, detail='El periodo está cerrado. Debe reabrirse para editar lecturas.')
 
     enforce_tenant_scope(current_user, str(period['condominium_id']))
 
