@@ -23,6 +23,7 @@ type House = {
   _id: string;
   numero_casa: string;
   es_zona_comun: boolean;
+  incluir_en_liquidacion: boolean;
 };
 
 type Reading = {
@@ -180,8 +181,11 @@ export default function MeterReadingsPage(): React.ReactNode {
         if (periodData.length > 0) {
           setSelectedPeriod(periodData[0]._id);
         }
-        if (houseData.length > 0) {
-          setForm((prev) => ({ ...prev, house_id: houseData[0]._id }));
+        const eligible = houseData.filter((house) => house.incluir_en_liquidacion !== false);
+        if (eligible.length > 0) {
+          setForm((prev) => ({ ...prev, house_id: eligible[0]._id }));
+        } else {
+          setForm((prev) => ({ ...prev, house_id: '' }));
         }
       })
       .catch((err) => setError(err.message));
@@ -205,6 +209,23 @@ export default function MeterReadingsPage(): React.ReactNode {
       .catch((err) => setError(err.message))
       .finally(() => setLoadingPrefill(false));
   }, [form.house_id, selectedPeriod, refreshFlag]);
+
+  const eligibleHouses = useMemo(
+    () => houses.filter((house) => house.incluir_en_liquidacion !== false),
+    [houses]
+  );
+
+  useEffect(() => {
+    if (!eligibleHouses.length) {
+      if (form.house_id) {
+        setForm((prev) => ({ ...prev, house_id: '' }));
+      }
+      return;
+    }
+    if (!eligibleHouses.some((house) => house._id === form.house_id)) {
+      setForm((prev) => ({ ...prev, house_id: eligibleHouses[0]._id }));
+    }
+  }, [eligibleHouses, form.house_id]);
 
   const onPhotoSelected = (file: File | null): void => {
     setPhotoFile(file);
@@ -452,6 +473,10 @@ export default function MeterReadingsPage(): React.ReactNode {
 
   const saveReading = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
+    if (!form.house_id) {
+      setError('No hay casas habilitadas para liquidación interna.');
+      return;
+    }
     setLoadingAction(true);
     setError('');
     setNotice('');
@@ -516,7 +541,7 @@ export default function MeterReadingsPage(): React.ReactNode {
             <MetricCard title="Lecturas registradas" value={readings.length} />
             <MetricCard title="Lecturas con foto" value={readingsWithPhoto} />
             <MetricCard title="Consumo total periodo" value={`${toNumber(totalConsumption)} kWh`} />
-            <MetricCard title="Casas activas" value={houses.length} />
+            <MetricCard title="Casas para lectura" value={eligibleHouses.length} />
           </div>
 
           {role === 'superadmin' ? (
@@ -558,12 +583,17 @@ export default function MeterReadingsPage(): React.ReactNode {
                 <label className="text-sm text-pine-700 xl:col-span-2">
                   Casa
                   <select className="mt-1 w-full rounded-xl px-3 py-2.5" value={form.house_id} onChange={(e) => setForm({ ...form, house_id: e.target.value })}>
-                    {houses.map((house) => (
+                    {eligibleHouses.map((house) => (
                       <option key={house._id} value={house._id}>
                         {house.numero_casa} {house.es_zona_comun ? '(zona común)' : ''}
                       </option>
                     ))}
                   </select>
+                  {eligibleHouses.length === 0 ? (
+                    <span className="mt-1 block text-xs text-amber-700">
+                      No hay casas marcadas para liquidación interna en este condominio.
+                    </span>
+                  ) : null}
                 </label>
                 <label className="text-sm text-pine-700">
                   Lectura anterior
@@ -674,7 +704,11 @@ export default function MeterReadingsPage(): React.ReactNode {
                 </div>
               ) : null}
 
-              <button className="rounded-xl bg-pine-700 px-4 py-2.5 font-semibold text-white" type="submit">
+              <button
+                className="rounded-xl bg-pine-700 px-4 py-2.5 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                type="submit"
+                disabled={!form.house_id}
+              >
                 {loadingAction ? 'Guardando...' : 'Guardar lectura'}
               </button>
             </form>

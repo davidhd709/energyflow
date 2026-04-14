@@ -59,7 +59,13 @@ async def calculate_billing(
     if not supplier_invoice:
         raise HTTPException(status_code=400, detail='No existe factura global del proveedor para este periodo')
 
-    houses = await db.houses.find({'condominium_id': condominium_obj_id, 'activo': True}).to_list(length=None)
+    houses = await db.houses.find(
+        {
+            'condominium_id': condominium_obj_id,
+            'activo': True,
+            'incluir_en_liquidacion': {'$ne': False},
+        }
+    ).to_list(length=None)
     if not houses:
         raise HTTPException(status_code=400, detail='No hay casas activas para el condominio')
 
@@ -187,7 +193,13 @@ async def build_general_report(
     period_obj_id = scoped['period_obj_id']
     condominium_obj_id = to_object_id(period['condominium_id'], 'condominium_id')
 
-    houses = await db.houses.find({'condominium_id': condominium_obj_id, 'activo': True}).sort('numero_casa', 1).to_list(length=None)
+    houses = await db.houses.find(
+        {
+            'condominium_id': condominium_obj_id,
+            'activo': True,
+            'incluir_en_liquidacion': {'$ne': False},
+        }
+    ).sort('numero_casa', 1).to_list(length=None)
     readings = await db.meter_readings.find({'billing_period_id': period_obj_id}).to_list(length=None)
     reading_map = {str(item['house_id']): serialize_doc(item) for item in readings}
 

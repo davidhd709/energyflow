@@ -20,6 +20,7 @@ type House = {
   serial_nuevo: string;
   tipo_medidor: string;
   es_zona_comun: boolean;
+  incluir_en_liquidacion: boolean;
   activo: boolean;
 };
 
@@ -40,7 +41,8 @@ export default function HousesPage(): React.ReactNode {
     serie_medidor: '',
     serial_nuevo: '',
     tipo_medidor: 'digital',
-    es_zona_comun: false
+    es_zona_comun: false,
+    incluir_en_liquidacion: true
   });
 
   const { condominiums, selectedCondominiumId, setSelectedCondominiumId, queryParam, ready } = useCondominiumScope(session);
@@ -84,7 +86,8 @@ export default function HousesPage(): React.ReactNode {
         serie_medidor: '',
         serial_nuevo: '',
         tipo_medidor: 'digital',
-        es_zona_comun: false
+        es_zona_comun: false,
+        incluir_en_liquidacion: true
       });
       setEditingHouseId(null);
       setRefreshFlag((value) => value + 1);
@@ -119,7 +122,8 @@ export default function HousesPage(): React.ReactNode {
       serie_medidor: house.serie_medidor,
       serial_nuevo: house.serial_nuevo,
       tipo_medidor: house.tipo_medidor,
-      es_zona_comun: house.es_zona_comun
+      es_zona_comun: house.es_zona_comun,
+      incluir_en_liquidacion: house.incluir_en_liquidacion !== false
     });
   };
 
@@ -133,6 +137,7 @@ export default function HousesPage(): React.ReactNode {
         'Serial nuevo': house.serial_nuevo || '-',
         Tipo: house.tipo_medidor,
         'Zona común': house.es_zona_comun ? 'Sí' : 'No',
+        'Liquidación interna': house.incluir_en_liquidacion !== false ? 'Sí' : 'No (proveedor externo)',
         Activo: house.activo ? 'Sí' : 'No',
         Acción: isReadOnly ? (
           '-'
@@ -233,6 +238,14 @@ export default function HousesPage(): React.ReactNode {
                 <input type="checkbox" checked={form.es_zona_comun} onChange={(e) => setForm({ ...form, es_zona_comun: e.target.checked })} />
                 Marcar como zona común
               </label>
+              <label className="inline-flex items-center gap-2 rounded-xl border border-pine-200 bg-white px-3 py-2 text-sm text-pine-800">
+                <input
+                  type="checkbox"
+                  checked={form.incluir_en_liquidacion}
+                  onChange={(e) => setForm({ ...form, incluir_en_liquidacion: e.target.checked })}
+                />
+                Incluir en liquidación interna
+              </label>
 
               <div className="flex flex-wrap gap-2">
                 <button className="rounded-xl bg-pine-700 px-4 py-2 font-semibold text-white" type="submit">
@@ -251,7 +264,8 @@ export default function HousesPage(): React.ReactNode {
                         serie_medidor: '',
                         serial_nuevo: '',
                         tipo_medidor: 'digital',
-                        es_zona_comun: false
+                        es_zona_comun: false,
+                        incluir_en_liquidacion: true
                       });
                     }}
                   >
@@ -263,7 +277,7 @@ export default function HousesPage(): React.ReactNode {
           ) : null}
 
           <TableBlock
-            columns={['Usuario', 'Casa', 'Ubicación', 'Serie medidor', 'Serial nuevo', 'Tipo', 'Zona común', 'Activo', 'Acción']}
+            columns={['Usuario', 'Casa', 'Ubicación', 'Serie medidor', 'Serial nuevo', 'Tipo', 'Zona común', 'Liquidación interna', 'Activo', 'Acción']}
             rows={rows}
           />
         </section>

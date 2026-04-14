@@ -52,6 +52,7 @@ async def create_house(
         'serial_nuevo': payload.serial_nuevo or '',
         'tipo_medidor': payload.tipo_medidor or 'digital',
         'es_zona_comun': payload.es_zona_comun,
+        'incluir_en_liquidacion': payload.incluir_en_liquidacion,
         'activo': payload.activo,
         'created_at': now,
         'updated_at': now,
@@ -71,6 +72,7 @@ async def create_house(
             'nombre_usuario': payload.nombre_usuario or '',
             'numero_casa': payload.numero_casa,
             'es_zona_comun': payload.es_zona_comun,
+            'incluir_en_liquidacion': payload.incluir_en_liquidacion,
         },
     )
 

@@ -370,10 +370,11 @@ def invoice_html(invoice: dict, house: dict, period: dict, condominium: dict) ->
       padding: 6px;
     }}
     .photo-frame img {{
-      width: 268px;
-      height: 161px;
+      width: 100%;
+      height: 100%;
       display: block;
-      object-fit: cover;
+      object-fit: contain;
+      object-position: center center;
     }}
   </style>
 </head>

@@ -160,7 +160,13 @@ async def close_period(
     if period.get('estado') == 'cerrado':
         raise HTTPException(status_code=400, detail='El periodo ya está cerrado')
 
-    houses = await db.houses.find({'condominium_id': period['condominium_id'], 'activo': True}).to_list(length=None)
+    houses = await db.houses.find(
+        {
+            'condominium_id': period['condominium_id'],
+            'activo': True,
+            'incluir_en_liquidacion': {'$ne': False},
+        }
+    ).to_list(length=None)
     readings = await db.meter_readings.find({'billing_period_id': period_obj_id}).to_list(length=None)
     reading_house_ids = {str(reading['house_id']) for reading in readings}
 

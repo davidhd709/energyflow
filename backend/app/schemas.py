@@ -55,6 +55,7 @@ class HouseCreate(BaseModel):
     serial_nuevo: Optional[str] = ''
     tipo_medidor: Optional[str] = 'digital'
     es_zona_comun: bool = False
+    incluir_en_liquidacion: bool = True
     activo: bool = True
 
 
@@ -66,6 +67,7 @@ class HouseUpdate(BaseModel):
     serial_nuevo: Optional[str] = None
     tipo_medidor: Optional[str] = None
     es_zona_comun: Optional[bool] = None
+    incluir_en_liquidacion: Optional[bool] = None
     activo: Optional[bool] = None
 
 
