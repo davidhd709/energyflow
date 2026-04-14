@@ -30,6 +30,9 @@ export default function BillingPeriodsPage(): React.ReactNode {
   const [loadingAction, setLoadingAction] = useState(false);
   const [refreshFlag, setRefreshFlag] = useState(0);
   const [form, setForm] = useState({ fecha_inicio: '', fecha_fin: '' });
+  const [reopenModalOpen, setReopenModalOpen] = useState(false);
+  const [reopenPeriodId, setReopenPeriodId] = useState('');
+  const [reopenReason, setReopenReason] = useState('');
 
   const { condominiums, selectedCondominiumId, setSelectedCondominiumId, queryParam, ready } = useCondominiumScope(session);
 
@@ -78,20 +81,34 @@ export default function BillingPeriodsPage(): React.ReactNode {
     }
   };
 
-  const reopenPeriod = async (periodId: string): Promise<void> => {
-    const motivo = window.prompt('Escribe el motivo de reapertura del periodo:');
-    if (!motivo) return;
+  const openReopenModal = (periodId: string): void => {
+    setReopenPeriodId(periodId);
+    setReopenReason('');
+    setReopenModalOpen(true);
+  };
+
+  const closeReopenModal = (force = false): void => {
+    if (loadingAction && !force) return;
+    setReopenModalOpen(false);
+    setReopenPeriodId('');
+    setReopenReason('');
+  };
+
+  const reopenPeriod = async (): Promise<void> => {
+    const motivo = reopenReason.trim();
+    if (!reopenPeriodId || motivo.length < 8) return;
 
     setLoadingAction(true);
     setError('');
     setSuccess('');
     try {
-      await apiFetch(`/billing-periods/${periodId}/reopen`, {
+      await apiFetch(`/billing-periods/${reopenPeriodId}/reopen`, {
         method: 'POST',
         body: JSON.stringify({ motivo })
       });
       setSuccess('Periodo reabierto con éxito.');
       setRefreshFlag((value) => value + 1);
+      closeReopenModal(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo reabrir el periodo.');
     } finally {
@@ -109,7 +126,7 @@ export default function BillingPeriodsPage(): React.ReactNode {
           '-'
         ) : period.estado === 'cerrado' ? (
           isSuperadmin ? (
-            <button className="rounded bg-amber-600 px-2 py-1 text-xs text-white transition hover:bg-amber-700" onClick={() => reopenPeriod(period._id)}>
+            <button className="rounded bg-amber-600 px-2 py-1 text-xs text-white transition hover:bg-amber-700" onClick={() => openReopenModal(period._id)}>
               Reabrir
             </button>
           ) : (
@@ -184,6 +201,50 @@ export default function BillingPeriodsPage(): React.ReactNode {
             <TableBlock columns={['Periodo', 'Días', 'Estado', 'Acción']} rows={rows} />
           </div>
         </section>
+
+        {reopenModalOpen ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/55 p-4">
+            <div className="w-full max-w-xl rounded-2xl border border-pine-200 bg-white p-5 shadow-2xl">
+              <h3 className="font-[var(--font-title)] text-xl text-pine-900">Reabrir periodo cerrado</h3>
+              <p className="mt-1 text-sm text-pine-700">
+                Esta acción quedará registrada en auditoría. Debes indicar el motivo.
+              </p>
+
+              <label className="mt-4 block text-sm text-pine-700">
+                Motivo de reapertura
+                <textarea
+                  className="mt-1 min-h-28 w-full rounded-xl border border-pine-300 px-3 py-2.5"
+                  value={reopenReason}
+                  onChange={(e) => setReopenReason(e.target.value)}
+                  placeholder="Ejemplo: Ajuste por error de lectura reportado por el operador."
+                  maxLength={500}
+                />
+                <span className="mt-1 block text-xs text-pine-600">
+                  Mínimo 8 caracteres. {reopenReason.trim().length}/500
+                </span>
+              </label>
+
+              <div className="mt-4 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  className="rounded-xl border border-pine-300 px-4 py-2 text-sm font-semibold text-pine-800"
+                  onClick={() => closeReopenModal()}
+                  disabled={loadingAction}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={reopenPeriod}
+                  disabled={loadingAction || reopenReason.trim().length < 8}
+                >
+                  {loadingAction ? 'Reabriendo...' : 'Confirmar reapertura'}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </AppShell>
     </AuthGuard>
   );
