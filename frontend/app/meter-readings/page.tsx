@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import AppShell from '@/components/AppShell';
 import ActionFeedback from '@/components/ActionFeedback';
@@ -44,33 +44,46 @@ const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/
   .replace(/^NEXT_PUBLIC_API_URL\s*=\s*/i, '')
   .replace(/^['"]|['"]$/g, '')
   .replace('/api/v1', '');
-const PHOTO_CROP_RATIO = 268 / 161;
+const MIN_CROP_PERCENT = 8;
+
+type CropRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
 
 type PhotoCrop = {
   src: string;
   width: number;
   height: number;
-  zoom: number;
-  offsetX: number;
-  offsetY: number;
+  rect: CropRect;
   fileName: string;
 };
 
+type ResizeHandle = 'nw' | 'ne' | 'sw' | 'se';
+
+type CropDragState =
+  | {
+      mode: 'move';
+      startX: number;
+      startY: number;
+      startRect: CropRect;
+    }
+  | {
+      mode: 'resize';
+      handle: ResizeHandle;
+      startX: number;
+      startY: number;
+      startRect: CropRect;
+    }
+  | {
+      mode: 'create';
+      startX: number;
+      startY: number;
+    };
+
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(value, max));
-
-const computeCropArea = (crop: PhotoCrop): { x: number; y: number; width: number; height: number } => {
-  const maxCropWidth = Math.min(crop.width, crop.height * PHOTO_CROP_RATIO) * 0.96;
-  const cropWidth = clamp(maxCropWidth / crop.zoom, crop.width * 0.2, maxCropWidth);
-  const cropHeight = cropWidth / PHOTO_CROP_RATIO;
-
-  const freeX = Math.max(crop.width - cropWidth, 0);
-  const freeY = Math.max(crop.height - cropHeight, 0);
-
-  const x = clamp(freeX / 2 + (crop.offsetX / 100) * (freeX / 2), 0, freeX);
-  const y = clamp(freeY / 2 + (crop.offsetY / 100) * (freeY / 2), 0, freeY);
-
-  return { x, y, width: cropWidth, height: cropHeight };
-};
 
 const buildCroppedPhoto = async (crop: PhotoCrop): Promise<File> => {
   const image = new Image();
@@ -80,7 +93,12 @@ const buildCroppedPhoto = async (crop: PhotoCrop): Promise<File> => {
     image.onerror = () => reject(new Error('No se pudo cargar la imagen para recortar.'));
   });
 
-  const area = computeCropArea(crop);
+  const area = {
+    x: (crop.rect.x / 100) * crop.width,
+    y: (crop.rect.y / 100) * crop.height,
+    width: (crop.rect.width / 100) * crop.width,
+    height: (crop.rect.height / 100) * crop.height
+  };
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(area.width);
   canvas.height = Math.round(area.height);
@@ -137,11 +155,13 @@ export default function MeterReadingsPage(): React.ReactNode {
   const [prefillSource, setPrefillSource] = useState<PrefillReading['source']>('default');
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoCrop, setPhotoCrop] = useState<PhotoCrop | null>(null);
+  const [cropDrag, setCropDrag] = useState<CropDragState | null>(null);
   const [photoInputKey, setPhotoInputKey] = useState(0);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraError, setCameraError] = useState('');
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const cropContainerRef = useRef<HTMLDivElement | null>(null);
   const [form, setForm] = useState({
     house_id: '',
     lectura_actual: 0,
@@ -186,12 +206,11 @@ export default function MeterReadingsPage(): React.ReactNode {
       .finally(() => setLoadingPrefill(false));
   }, [form.house_id, selectedPeriod, refreshFlag]);
 
-  const cropArea = useMemo(() => (photoCrop ? computeCropArea(photoCrop) : null), [photoCrop]);
-
   const onPhotoSelected = (file: File | null): void => {
     setPhotoFile(file);
     if (!file) {
       setPhotoCrop(null);
+      setCropDrag(null);
       return;
     }
 
@@ -204,9 +223,7 @@ export default function MeterReadingsPage(): React.ReactNode {
           src,
           width: image.naturalWidth,
           height: image.naturalHeight,
-          zoom: 1.35,
-          offsetX: 0,
-          offsetY: 0,
+          rect: { x: 12, y: 12, width: 76, height: 76 },
           fileName: file.name
         });
       };
@@ -221,6 +238,142 @@ export default function MeterReadingsPage(): React.ReactNode {
       setPhotoCrop(null);
     };
     reader.readAsDataURL(file);
+  };
+
+  const getPointerPercent = (clientX: number, clientY: number): { x: number; y: number } | null => {
+    const container = cropContainerRef.current;
+    if (!container) return null;
+    const bounds = container.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return null;
+    return {
+      x: clamp(((clientX - bounds.left) / bounds.width) * 100, 0, 100),
+      y: clamp(((clientY - bounds.top) / bounds.height) * 100, 0, 100)
+    };
+  };
+
+  const startCreateCrop = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    if (!photoCrop) return;
+    cropContainerRef.current?.setPointerCapture(event.pointerId);
+    const point = getPointerPercent(event.clientX, event.clientY);
+    if (!point) return;
+    setCropDrag({ mode: 'create', startX: point.x, startY: point.y });
+    setPhotoCrop((prev) =>
+      prev
+        ? {
+            ...prev,
+            rect: { x: point.x, y: point.y, width: MIN_CROP_PERCENT, height: MIN_CROP_PERCENT }
+          }
+        : prev
+    );
+  };
+
+  const startMoveCrop = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    event.stopPropagation();
+    if (!photoCrop) return;
+    cropContainerRef.current?.setPointerCapture(event.pointerId);
+    const point = getPointerPercent(event.clientX, event.clientY);
+    if (!point) return;
+    setCropDrag({
+      mode: 'move',
+      startX: point.x,
+      startY: point.y,
+      startRect: { ...photoCrop.rect }
+    });
+  };
+
+  const startResizeCrop = (handle: ResizeHandle, event: ReactPointerEvent<HTMLDivElement>): void => {
+    event.stopPropagation();
+    if (!photoCrop) return;
+    cropContainerRef.current?.setPointerCapture(event.pointerId);
+    const point = getPointerPercent(event.clientX, event.clientY);
+    if (!point) return;
+    setCropDrag({
+      mode: 'resize',
+      handle,
+      startX: point.x,
+      startY: point.y,
+      startRect: { ...photoCrop.rect }
+    });
+  };
+
+  const applyDragToCrop = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    if (!cropDrag || !photoCrop) return;
+    const point = getPointerPercent(event.clientX, event.clientY);
+    if (!point) return;
+
+    if (cropDrag.mode === 'create') {
+      const x = Math.min(cropDrag.startX, point.x);
+      const y = Math.min(cropDrag.startY, point.y);
+      const width = Math.max(MIN_CROP_PERCENT, Math.abs(point.x - cropDrag.startX));
+      const height = Math.max(MIN_CROP_PERCENT, Math.abs(point.y - cropDrag.startY));
+      setPhotoCrop((prev) =>
+        prev
+          ? {
+              ...prev,
+              rect: {
+                x: clamp(x, 0, 100 - MIN_CROP_PERCENT),
+                y: clamp(y, 0, 100 - MIN_CROP_PERCENT),
+                width: clamp(width, MIN_CROP_PERCENT, 100 - clamp(x, 0, 100)),
+                height: clamp(height, MIN_CROP_PERCENT, 100 - clamp(y, 0, 100))
+              }
+            }
+          : prev
+      );
+      return;
+    }
+
+    if (cropDrag.mode === 'move') {
+      const dx = point.x - cropDrag.startX;
+      const dy = point.y - cropDrag.startY;
+      const nextX = clamp(cropDrag.startRect.x + dx, 0, 100 - cropDrag.startRect.width);
+      const nextY = clamp(cropDrag.startRect.y + dy, 0, 100 - cropDrag.startRect.height);
+      setPhotoCrop((prev) => (prev ? { ...prev, rect: { ...prev.rect, x: nextX, y: nextY } } : prev));
+      return;
+    }
+
+    const dx = point.x - cropDrag.startX;
+    const dy = point.y - cropDrag.startY;
+    const start = cropDrag.startRect;
+    const startRight = start.x + start.width;
+    const startBottom = start.y + start.height;
+    let x = start.x;
+    let y = start.y;
+    let right = startRight;
+    let bottom = startBottom;
+
+    if (cropDrag.handle === 'nw' || cropDrag.handle === 'sw') {
+      x = clamp(start.x + dx, 0, startRight - MIN_CROP_PERCENT);
+    }
+    if (cropDrag.handle === 'ne' || cropDrag.handle === 'se') {
+      right = clamp(startRight + dx, start.x + MIN_CROP_PERCENT, 100);
+    }
+    if (cropDrag.handle === 'nw' || cropDrag.handle === 'ne') {
+      y = clamp(start.y + dy, 0, startBottom - MIN_CROP_PERCENT);
+    }
+    if (cropDrag.handle === 'sw' || cropDrag.handle === 'se') {
+      bottom = clamp(startBottom + dy, start.y + MIN_CROP_PERCENT, 100);
+    }
+
+    setPhotoCrop((prev) =>
+      prev
+        ? {
+            ...prev,
+            rect: {
+              x,
+              y,
+              width: clamp(right - x, MIN_CROP_PERCENT, 100),
+              height: clamp(bottom - y, MIN_CROP_PERCENT, 100)
+            }
+          }
+        : prev
+    );
+  };
+
+  const endCropDrag = (event?: ReactPointerEvent<HTMLDivElement>): void => {
+    if (event && cropContainerRef.current?.hasPointerCapture(event.pointerId)) {
+      cropContainerRef.current.releasePointerCapture(event.pointerId);
+    }
+    setCropDrag(null);
   };
 
   const stopCamera = (): void => {
@@ -473,75 +626,50 @@ export default function MeterReadingsPage(): React.ReactNode {
                 ) : null}
               </div>
 
-              {photoCrop && cropArea ? (
+              {photoCrop ? (
                 <div className="rounded-2xl border border-pine-200 bg-pine-50 p-3">
                   <p className="text-sm font-semibold text-pine-900">Recorte de foto del medidor</p>
                   <p className="text-xs text-pine-700">
-                    Ajusta el encuadre para que se vea claramente la lectura y el serial.
+                    Arrastra el marco verde para moverlo y usa las esquinas para ajustar el área libremente.
                   </p>
 
-                  <div className="relative mt-3 overflow-hidden rounded-lg border border-pine-300 bg-white">
-                    <img src={photoCrop.src} alt="Previsualización foto medidor" className="h-auto w-full" />
+                  <div
+                    ref={cropContainerRef}
+                    className="relative mt-3 overflow-hidden rounded-lg border border-pine-300 bg-white touch-none select-none"
+                    onPointerDown={startCreateCrop}
+                    onPointerMove={applyDragToCrop}
+                    onPointerUp={endCropDrag}
+                    onPointerCancel={endCropDrag}
+                    onPointerLeave={endCropDrag}
+                  >
+                    <img src={photoCrop.src} alt="Previsualización foto medidor" className="h-auto w-full" draggable={false} />
                     <div
-                      className="pointer-events-none absolute border-2 border-lime-500 shadow-[0_0_0_9999px_rgba(0,0,0,0.28)]"
+                      className="absolute border-2 border-lime-500 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]"
+                      onPointerDown={startMoveCrop}
                       style={{
-                        left: `${(cropArea.x / photoCrop.width) * 100}%`,
-                        top: `${(cropArea.y / photoCrop.height) * 100}%`,
-                        width: `${(cropArea.width / photoCrop.width) * 100}%`,
-                        height: `${(cropArea.height / photoCrop.height) * 100}%`
+                        left: `${photoCrop.rect.x}%`,
+                        top: `${photoCrop.rect.y}%`,
+                        width: `${photoCrop.rect.width}%`,
+                        height: `${photoCrop.rect.height}%`
                       }}
-                    />
-                  </div>
-
-                  <div className="mt-3 grid gap-2 md:grid-cols-3">
-                    <label className="text-xs text-pine-700">
-                      Zoom
-                      <input
-                        className="mt-1 w-full"
-                        type="range"
-                        min={1}
-                        max={3}
-                        step={0.05}
-                        value={photoCrop.zoom}
-                        onChange={(e) =>
-                          setPhotoCrop((prev) =>
-                            prev ? { ...prev, zoom: Number(e.target.value) } : prev
-                          )
-                        }
+                    >
+                      <div
+                        className="absolute -left-2 -top-2 h-4 w-4 cursor-nwse-resize rounded-full border-2 border-lime-600 bg-white"
+                        onPointerDown={(event) => startResizeCrop('nw', event)}
                       />
-                    </label>
-                    <label className="text-xs text-pine-700">
-                      Mover horizontal
-                      <input
-                        className="mt-1 w-full"
-                        type="range"
-                        min={-100}
-                        max={100}
-                        step={1}
-                        value={photoCrop.offsetX}
-                        onChange={(e) =>
-                          setPhotoCrop((prev) =>
-                            prev ? { ...prev, offsetX: Number(e.target.value) } : prev
-                          )
-                        }
+                      <div
+                        className="absolute -right-2 -top-2 h-4 w-4 cursor-nesw-resize rounded-full border-2 border-lime-600 bg-white"
+                        onPointerDown={(event) => startResizeCrop('ne', event)}
                       />
-                    </label>
-                    <label className="text-xs text-pine-700">
-                      Mover vertical
-                      <input
-                        className="mt-1 w-full"
-                        type="range"
-                        min={-100}
-                        max={100}
-                        step={1}
-                        value={photoCrop.offsetY}
-                        onChange={(e) =>
-                          setPhotoCrop((prev) =>
-                            prev ? { ...prev, offsetY: Number(e.target.value) } : prev
-                          )
-                        }
+                      <div
+                        className="absolute -bottom-2 -left-2 h-4 w-4 cursor-nesw-resize rounded-full border-2 border-lime-600 bg-white"
+                        onPointerDown={(event) => startResizeCrop('sw', event)}
                       />
-                    </label>
+                      <div
+                        className="absolute -bottom-2 -right-2 h-4 w-4 cursor-nwse-resize rounded-full border-2 border-lime-600 bg-white"
+                        onPointerDown={(event) => startResizeCrop('se', event)}
+                      />
+                    </div>
                   </div>
                 </div>
               ) : null}
