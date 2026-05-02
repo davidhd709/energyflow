@@ -1,0 +1,27 @@
+name: Deploy to Contabo
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy EnergyFlow
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy on Contabo
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.CONTABO_HOST }}
+          username: ${{ secrets.CONTABO_DEPLOY_USER }}
+          key: ${{ secrets.CONTABO_SSH_KEY }}
+          port: ${{ secrets.CONTABO_SSH_PORT || 22 }}
+          script_stop: true
+          script: |
+            echo "energyflow-deploy"
