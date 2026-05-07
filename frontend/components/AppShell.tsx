@@ -7,6 +7,7 @@ import clsx from 'clsx';
 
 import { useSession } from '@/hooks/useSession';
 import { logout } from '@/lib/auth';
+import Brand from '@/components/ui/Brand';
 
 type NavItem = {
   href: string;
@@ -124,26 +125,7 @@ export default function AppShell({ children }: { children: React.ReactNode }): R
     .map((part) => part[0]?.toUpperCase())
     .join('');
 
-  const Brand = (
-    <div className="flex items-center gap-2.5">
-      <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-brand-gradient shadow-elevation-2 ring-1 ring-white/30">
-        <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5 text-white">
-          <path
-            d="M13 2L4 13h6l-1 9 9-11h-6l1-9z"
-            fill="currentColor"
-            stroke="currentColor"
-            strokeWidth="0.5"
-            strokeLinejoin="round"
-          />
-        </svg>
-        <span className="absolute -inset-1 rounded-xl bg-brand-400/20 blur-md" aria-hidden="true" />
-      </div>
-      <div className="leading-tight">
-        <p className="font-display text-base font-bold tracking-tight text-white">EnergyFlow</p>
-        <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/60">SaaS</p>
-      </div>
-    </div>
-  );
+  const BrandMark = <Brand variant="card" size="sm" priority />;
 
   const NavList = (
     <nav className="flex flex-col gap-1 px-3">
@@ -228,9 +210,9 @@ export default function AppShell({ children }: { children: React.ReactNode }): R
               <path strokeLinecap="round" d="M4 7h16M4 12h16M4 17h16" />
             </svg>
           </button>
-          <div className="text-center">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-brand-700">EnergyFlow</p>
-            <p className="text-sm font-semibold text-ink">{currentLabel}</p>
+          <div className="flex flex-col items-center">
+            <Brand size="sm" priority />
+            <p className="mt-0.5 text-xs font-semibold text-ink">{currentLabel}</p>
           </div>
           <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-brand-700 to-accent-500 text-sm font-bold text-white shadow-elevation-2">
             {initials}
@@ -247,7 +229,7 @@ export default function AppShell({ children }: { children: React.ReactNode }): R
           )}
         >
           <div className="flex items-center justify-between border-b border-white/10 px-5 py-5">
-            {Brand}
+            {BrandMark}
             <button
               type="button"
               onClick={() => setMobileNavOpen(false)}
@@ -281,7 +263,7 @@ export default function AppShell({ children }: { children: React.ReactNode }): R
           <header className="hidden border-b border-border-soft bg-white/70 backdrop-blur-xl lg:block">
             <div className="flex h-16 items-center justify-between gap-4 px-6 xl:px-8">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-brand-600">EnergyFlow</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-brand-600">Panel</p>
                 <h1 className="text-lg font-semibold text-ink">{currentLabel}</h1>
               </div>
               <div className="flex items-center gap-3">

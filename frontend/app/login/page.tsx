@@ -4,7 +4,7 @@ import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import ActionFeedback from '@/components/ActionFeedback';
-import { Button } from '@/components/ui';
+import { Brand, Button } from '@/components/ui';
 import { cacheUser } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
 import { SessionUser } from '@/lib/types';
@@ -62,22 +62,8 @@ export default function LoginPage(): React.ReactNode {
         />
 
         <div className="relative z-10 flex h-full flex-col justify-between p-12 text-white">
-          <div className="flex items-center gap-3">
-            <div className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/20 backdrop-blur">
-              <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6 text-white">
-                <path
-                  d="M13 2L4 13h6l-1 9 9-11h-6l1-9z"
-                  fill="currentColor"
-                  stroke="currentColor"
-                  strokeWidth="0.5"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
-            <div>
-              <p className="font-display text-xl font-bold tracking-tight">EnergyFlow</p>
-              <p className="text-xs uppercase tracking-[0.18em] text-white/60">SaaS · Energy</p>
-            </div>
+          <div className="flex items-center">
+            <Brand variant="card" size="md" priority />
           </div>
 
           <div className="space-y-6">
@@ -131,20 +117,8 @@ export default function LoginPage(): React.ReactNode {
         <div className="absolute inset-0 -z-10 bg-grid-pattern opacity-40 lg:hidden" aria-hidden="true" />
 
         <div className="w-full max-w-[440px] animate-fade-in-up">
-          <div className="mb-8 text-center lg:hidden">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-gradient shadow-elevation-3 ring-1 ring-white/30">
-              <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6 text-white">
-                <path
-                  d="M13 2L4 13h6l-1 9 9-11h-6l1-9z"
-                  fill="currentColor"
-                  stroke="currentColor"
-                  strokeWidth="0.5"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
-            <p className="font-display text-2xl font-bold text-ink">EnergyFlow</p>
-            <p className="text-xs uppercase tracking-[0.18em] text-brand-600">SaaS · Energy</p>
+          <div className="mb-8 flex flex-col items-center text-center lg:hidden">
+            <Brand size="lg" priority />
           </div>
 
           <div className="rounded-3xl border border-border-soft bg-white p-7 shadow-elevation-3 sm:p-9">

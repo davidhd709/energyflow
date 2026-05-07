@@ -22,7 +22,11 @@ const jakarta = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: 'EnergyFlow SaaS',
-  description: 'Gestión de lecturas y facturación de energía para condominios'
+  description: 'Gestión de lecturas y facturación de energía para condominios',
+  icons: {
+    icon: '/brand/logo.png',
+    apple: '/brand/logo.png'
+  }
 };
 
 export default function RootLayout({
