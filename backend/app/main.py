@@ -53,7 +53,9 @@ app.add_middleware(
 app.add_middleware(AuthMiddleware)
 
 BASE_DIR = Path(__file__).resolve().parents[1]
-app.mount('/static', StaticFiles(directory=str(BASE_DIR / 'static')), name='static')
+STATIC_DIR = BASE_DIR / 'static'
+STATIC_DIR.mkdir(parents=True, exist_ok=True)
+app.mount('/static', StaticFiles(directory=str(STATIC_DIR)), name='static')
 app.include_router(api_router, prefix=settings.API_PREFIX)
 
 
