@@ -9,7 +9,6 @@ export type SessionUser = {
 };
 
 export type SessionData = {
-  token: string;
   user: SessionUser;
 };
 

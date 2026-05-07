@@ -672,6 +672,7 @@ export default function MeterReadingsPage(): React.ReactNode {
                     onPointerCancel={endCropDrag}
                     onPointerLeave={endCropDrag}
                   >
+                    {/* eslint-disable-next-line @next/next/no-img-element -- blob URL del archivo local, next/image no aplica al cropper */}
                     <img src={photoCrop.src} alt="Previsualización foto medidor" className="h-auto w-full" draggable={false} />
                     <div
                       className="absolute border-2 border-lime-500 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]"

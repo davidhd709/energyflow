@@ -5,11 +5,14 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from app.core.config import settings
 from app.core.security import decode_token
 from app.db.mongo import mongo
 from app.utils.object_id import serialize_doc, to_object_id
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/api/v1/auth/login')
+# auto_error=False permite que el dep no falle si el header Authorization
+# no está presente (caso autenticación por cookie HttpOnly).
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/api/v1/auth/login', auto_error=False)
 USER_CACHE_TTL_SECONDS = 120.0
 USER_CACHE: dict[str, tuple[float, dict]] = {}
 
@@ -30,13 +33,19 @@ async def get_db() -> AsyncIOMotorDatabase:
 
 async def get_current_user(
     request: Request,
-    token: str = Depends(oauth2_scheme),
+    token: str | None = Depends(oauth2_scheme),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> dict:
     payload = getattr(request.state, 'auth_payload', None)
     if payload is None:
+        # Fallback: el middleware debió poblar request.state, pero por si una
+        # ruta evita el middleware (ej. test client), intentamos decodificar
+        # primero la cookie y luego el header.
+        candidate = request.cookies.get(settings.AUTH_COOKIE_NAME) or token
+        if not candidate:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Token requerido')
         try:
-            payload = decode_token(token)
+            payload = decode_token(candidate)
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Token inválido') from exc
 
