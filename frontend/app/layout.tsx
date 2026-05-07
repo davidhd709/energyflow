@@ -1,15 +1,14 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Roboto } from 'next/font/google';
 
 import './globals.css';
 
-// Inter para todo — body y títulos. Mismo trazo en toda la app, jerarquía
-// se logra con tamaño y weight (400/500/600/700/800).
-const inter = Inter({
+// Roboto para toda la app — body y títulos. Sans-serif clara y neutra.
+const roboto = Roboto({
   subsets: ['latin'],
   variable: '--font-body',
   display: 'swap',
-  weight: ['400', '500', '600', '700', '800']
+  weight: ['400', '500', '700', '900']
 });
 
 export const metadata: Metadata = {
@@ -28,7 +27,7 @@ export default function RootLayout({
 }>): React.ReactNode {
   return (
     <html lang="es">
-      <body className={`${inter.variable} font-[var(--font-body)] antialiased`}>{children}</body>
+      <body className={`${roboto.variable} font-[var(--font-body)] antialiased`}>{children}</body>
     </html>
   );
 }
