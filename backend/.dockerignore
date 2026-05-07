@@ -1,7 +1,35 @@
 # backend/.dockerignore
+# Mantener la imagen pequeña y evitar copiar artefactos locales o secretos.
+
+# Python
 .venv
+venv
 __pycache__
 *.pyc
+*.pyo
+*.pyd
+
+# Entornos / secretos
 .env
+.env.*
+!.env.example
+
+# Generados en runtime
 static/uploads
 static/pdfs
+
+# Git / docs / editor noise
+.git
+.gitignore
+.dockerignore
+Dockerfile
+README.md
+*.md
+.DS_Store
+
+# Tests / herramientas locales
+tests
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.log

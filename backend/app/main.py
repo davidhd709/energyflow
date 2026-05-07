@@ -32,7 +32,15 @@ async def lifespan(app: FastAPI):
     await mongo.disconnect()
 
 
-app = FastAPI(title=settings.APP_NAME, lifespan=lifespan)
+_is_production = settings.ENV.lower() in {'prod', 'production'}
+
+app = FastAPI(
+    title=settings.APP_NAME,
+    lifespan=lifespan,
+    docs_url=None if _is_production else '/docs',
+    redoc_url=None if _is_production else '/redoc',
+    openapi_url=None if _is_production else '/openapi.json',
+)
 
 app.add_middleware(
     CORSMiddleware,

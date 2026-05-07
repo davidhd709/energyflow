@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend - import & syntax check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: System deps for WeasyPrint
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libcairo2 libpango-1.0-0 libpangoft2-1.0-0 \
+            libgdk-pixbuf-2.0-0 shared-mime-info
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile-check (py_compile)
+        run: python -m compileall -q app scripts
+
+      - name: Import-check (loads settings via dummy env)
+        env:
+          JWT_SECRET_KEY: ci_dummy_secret_min_16_chars_xx
+          MONGODB_URI: mongodb://localhost:27017
+          MONGODB_DB_NAME: energyflow_ci
+          CORS_ORIGINS: http://localhost:3000
+          ENV: ci
+        run: python -c "from app.main import app; print('app loaded:', app.title)"
+
+  frontend:
+    name: Frontend - lint & build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint --if-present
+
+      - name: Build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+          BACKEND_API_URL: http://localhost:8000
+        run: npm run build

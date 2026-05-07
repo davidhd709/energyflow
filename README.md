@@ -200,3 +200,65 @@ Columnas esperadas (como tu formato actual):
 
 ## Nota WeasyPrint
 Si el sistema operativo no tiene dependencias nativas de WeasyPrint, instálalas antes de generar PDFs (GTK/Pango/Cairo según distro).
+
+## Despliegue en producción (VPS Ubuntu + Nginx)
+
+> Este proyecto aún no tiene un pipeline de despliegue completo. Los pasos siguientes son la guía mínima recomendada hasta que `.github/workflows/deploy.yml` se complete.
+
+### Variables de entorno obligatorias en producción
+
+`backend/.env`:
+
+- `ENV=prod` (oculta `/docs`, `/redoc` y `/openapi.json`)
+- `JWT_SECRET_KEY`: cadena fuerte (≥32 caracteres). Generar con:
+  ```bash
+  python -c "import secrets; print(secrets.token_urlsafe(48))"
+  ```
+- `MONGODB_URI`: URI de Mongo Atlas con credenciales correctas
+- `CORS_ORIGINS`: dominios reales del frontend separados por coma (ej. `https://app.tudominio.com`)
+- `CORS_ORIGIN_REGEX`: dejar vacío en producción salvo que se necesite (Vercel previews, etc.)
+
+`frontend/.env.local`:
+
+- `NEXT_PUBLIC_API_URL=https://api.tudominio.com/api/v1`
+- `BACKEND_API_URL=https://api.tudominio.com` (o la URL interna si el proxy es server-to-server)
+
+### Backend con systemd (resumen)
+
+```bash
+# en el VPS
+cd /opt/energyflow/backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+# crear /etc/systemd/system/energyflow-api.service apuntando a:
+#   ExecStart=/opt/energyflow/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+sudo systemctl enable --now energyflow-api
+```
+
+Nginx debe hacer proxy_pass a `127.0.0.1:8000` (ver site config en docs internas) y exponer TLS.
+
+### Frontend (Vercel u otro)
+
+`npm ci && npm run build && npm run start` corriendo detrás de Nginx en otro puerto, o desplegado en Vercel apuntando a `BACKEND_API_URL` del VPS.
+
+## Seguridad — TODOs técnicos pendientes
+
+Estos puntos NO están aplicados todavía y deben evaluarse antes de un release a producción:
+
+- [ ] **JWT en localStorage**: hoy el token se guarda en `localStorage` ([frontend/lib/auth.ts](frontend/lib/auth.ts)). Es vulnerable a XSS. Migrar a cookies `HttpOnly + Secure + SameSite=Lax` (cambio grande, requiere endpoint de login que setee cookie y middleware backend que la lea).
+- [ ] **`/users/bootstrap-superadmin`** está en `PUBLIC_PATHS` ([backend/app/core/auth_middleware.py](backend/app/core/auth_middleware.py)). Verificar que el endpoint solo permita crear el primer superadmin si no existe ninguno; si no, protegerlo con un token de bootstrap (env var) o eliminarlo en producción tras el primer uso.
+- [ ] **Credenciales seed** del README y `backend/scripts/seed.py` son públicas — solo usar en entornos de desarrollo. Cambiar contraseñas tras el primer arranque productivo.
+- [ ] **`reactStrictMode: false`** en [frontend/next.config.mjs](frontend/next.config.mjs). Evaluar activarlo y resolver warnings que React 19 pueda exponer.
+- [ ] **`CORS_ORIGIN_REGEX` por defecto `https://.*\.vercel\.app`** ([backend/app/core/config.py](backend/app/core/config.py)) abre a cualquier proyecto Vercel. En prod fijarlo explícitamente al dominio real o vaciarlo.
+- [ ] **Dockerfile** corre como root. Considerar agregar `USER appuser` no privilegiado y permisos correctos sobre `static/uploads` y `static/pdfs`.
+- [ ] **`deploy.yml`** es un placeholder (solo `echo`). Implementar despliegue real cuando se tenga la ruta del proyecto en el VPS, comando de reload de systemd y build del frontend.
+
+## CI
+
+Workflow básico en `.github/workflows/ci.yml`:
+- Backend: `pip install` + `compileall` + import de `app.main`.
+- Frontend: `npm ci` + `npm run lint --if-present` + `npm run build`.
+
+Corre en `push` y `pull_request` contra `main`.
+
