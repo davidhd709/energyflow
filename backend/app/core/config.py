@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = 'http://localhost:3000'
     CORS_ORIGIN_REGEX: str | None = None
 
+    # Auth cookie (HttpOnly, sustituye a localStorage en frontend)
+    AUTH_COOKIE_NAME: str = 'energyflow_session'
+    AUTH_COOKIE_DOMAIN: str | None = None  # None = host actual; setear en prod si frontend/backend están en subdominios distintos
+    AUTH_COOKIE_SAMESITE: str = 'lax'  # 'lax' | 'strict' | 'none' (none requiere secure=true)
+
     @staticmethod
     def _strip_wrapping_quotes(value: str) -> str:
         text = value.strip()
@@ -38,6 +43,9 @@ class Settings(BaseSettings):
         'MONGODB_DB_NAME',
         'CORS_ORIGINS',
         'CORS_ORIGIN_REGEX',
+        'AUTH_COOKIE_NAME',
+        'AUTH_COOKIE_DOMAIN',
+        'AUTH_COOKIE_SAMESITE',
         mode='before',
     )
     @classmethod
@@ -65,6 +73,11 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(',') if origin.strip()]
+
+    @property
+    def auth_cookie_secure(self) -> bool:
+        # En prod siempre Secure=True (requiere HTTPS). En dev/ci permitimos http://localhost.
+        return self.ENV.lower() in {'prod', 'production'}
 
 
 @lru_cache

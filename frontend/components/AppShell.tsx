@@ -35,11 +35,20 @@ export default function AppShell({ children }: { children: React.ReactNode }): R
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const role = session?.user.rol;
-  const homeLink =
-    role === 'superadmin' ? { href: '/superadmin', label: 'Dashboard SA' } : role === 'admin' ? { href: '/admin', label: 'Dashboard Admin' } : { href: '/operator', label: 'Dashboard Operador' };
 
-  const links: LinkItem[] = [homeLink, ...(role === 'admin' ? adminLinks : operatorLinks)];
-  const currentLabel = useMemo(() => links.find((link) => link.href === pathname)?.label || 'Panel', [links, pathname]);
+  const links: LinkItem[] = useMemo(() => {
+    const homeLink: LinkItem =
+      role === 'superadmin'
+        ? { href: '/superadmin', label: 'Dashboard SA' }
+        : role === 'admin'
+          ? { href: '/admin', label: 'Dashboard Admin' }
+          : { href: '/operator', label: 'Dashboard Operador' };
+    return [homeLink, ...(role === 'admin' ? adminLinks : operatorLinks)];
+  }, [role]);
+  const currentLabel = useMemo(
+    () => links.find((link) => link.href === pathname)?.label || 'Panel',
+    [links, pathname]
+  );
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -83,8 +92,8 @@ export default function AppShell({ children }: { children: React.ReactNode }): R
             <button
               type="button"
               className="rounded-xl bg-pine-700 px-3 py-2 font-semibold text-cream transition hover:bg-pine-800"
-              onClick={() => {
-                logout();
+              onClick={async () => {
+                await logout();
                 router.push('/login');
               }}
             >

@@ -1,5 +1,3 @@
-import { getSession } from '@/lib/auth';
-
 const RAW_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 const BACKEND_API_URL = RAW_API_URL
   .replace(/^NEXT_PUBLIC_API_URL\s*=\s*/i, '')
@@ -16,7 +14,9 @@ function normalizeError(detail: unknown): string {
 export async function apiFetch<T>(
   path: string,
   options: RequestInit = {},
-  authenticated = true
+  // Mantenido por compatibilidad de firma. La autenticación ahora va por
+  // cookie HttpOnly (credentials: 'include'); este flag ya no decide nada.
+  _authenticated = true
 ): Promise<T> {
   const headers = new Headers(options.headers || {});
 
@@ -24,18 +24,12 @@ export async function apiFetch<T>(
     headers.set('Content-Type', 'application/json');
   }
 
-  if (authenticated) {
-    const session = getSession();
-    if (session?.token) {
-      headers.set('Authorization', `Bearer ${session.token}`);
-    }
-  }
-
   let response: Response;
   try {
     response = await fetch(`${API_URL}${path}`, {
       ...options,
-      headers
+      headers,
+      credentials: 'include'
     });
   } catch {
     throw new Error(

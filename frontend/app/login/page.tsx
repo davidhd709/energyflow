@@ -4,7 +4,7 @@ import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import ActionFeedback from '@/components/ActionFeedback';
-import { saveSession } from '@/lib/auth';
+import { cacheUser } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
 import { SessionUser } from '@/lib/types';
 
@@ -41,10 +41,9 @@ export default function LoginPage(): React.ReactNode {
         false
       );
 
-      saveSession({
-        token: response.access_token,
-        user: response.user
-      });
+      // El backend ya seteó la cookie HttpOnly. Solo cacheamos el usuario
+      // localmente para que el shell muestre nombre/rol sin esperar /auth/me.
+      cacheUser(response.user);
 
       router.push(routeByRole(response.user.rol));
     } catch (err) {
