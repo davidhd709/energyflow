@@ -62,8 +62,7 @@ async def root() -> dict:
     return {'status': 'ok', 'service': settings.APP_NAME}
 
 
-@app.get('/health')
-async def health() -> dict:
+async def _health_payload() -> dict:
     if mongo.client is None:
         return {'status': 'degraded', 'db': 'disconnected'}
 
@@ -72,3 +71,13 @@ async def health() -> dict:
         return {'status': 'ok', 'db': 'ok'}
     except Exception:
         return {'status': 'degraded', 'db': 'error'}
+
+
+@app.get('/health')
+async def health() -> dict:
+    return await _health_payload()
+
+
+@app.get(f'{settings.API_PREFIX}/health')
+async def health_api() -> dict:
+    return await _health_payload()

@@ -9,6 +9,7 @@ from app.core.security import decode_token
 class AuthMiddleware(BaseHTTPMiddleware):
     PUBLIC_PATHS = {
         '/health',
+        f'{settings.API_PREFIX}/health',
         f'{settings.API_PREFIX}/auth/login',
         f'{settings.API_PREFIX}/users/bootstrap-superadmin',
     }
