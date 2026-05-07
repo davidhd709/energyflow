@@ -70,9 +70,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Lint disabled: project does not have ESLint configured yet.
-      # `next lint` opens an interactive prompt in fresh Next.js 15 projects,
-      # which fails in CI. Re-enable when ESLint config is added.
+      - name: Lint
+        run: npm run lint
 
       - name: Build
         env:
