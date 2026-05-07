@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     MONGODB_DB_NAME: str = 'energyflow'
 
     CORS_ORIGINS: str = 'http://localhost:3000'
-    CORS_ORIGIN_REGEX: str | None = r'https://.*\.vercel\.app'
+    CORS_ORIGIN_REGEX: str | None = None
 
     @staticmethod
     def _strip_wrapping_quotes(value: str) -> str:

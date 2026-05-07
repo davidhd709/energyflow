@@ -250,7 +250,7 @@ Estos puntos NO están aplicados todavía y deben evaluarse antes de un release 
 - [ ] **`/users/bootstrap-superadmin`** está en `PUBLIC_PATHS` ([backend/app/core/auth_middleware.py](backend/app/core/auth_middleware.py)). Verificar que el endpoint solo permita crear el primer superadmin si no existe ninguno; si no, protegerlo con un token de bootstrap (env var) o eliminarlo en producción tras el primer uso.
 - [ ] **Credenciales seed** del README y `backend/scripts/seed.py` son públicas — solo usar en entornos de desarrollo. Cambiar contraseñas tras el primer arranque productivo.
 - [ ] **`reactStrictMode: false`** en [frontend/next.config.mjs](frontend/next.config.mjs). Evaluar activarlo y resolver warnings que React 19 pueda exponer.
-- [ ] **`CORS_ORIGIN_REGEX` por defecto `https://.*\.vercel\.app`** ([backend/app/core/config.py](backend/app/core/config.py)) abre a cualquier proyecto Vercel. En prod fijarlo explícitamente al dominio real o vaciarlo.
+- [x] **`CORS_ORIGIN_REGEX`**: el default permisivo `https://.*\.vercel\.app` se eliminó. Ahora es `None` por defecto. Si en el futuro vuelves a desplegar en Vercel, configura `CORS_ORIGIN_REGEX` explícito en `.env`.
 - [ ] **Dockerfile** corre como root. Considerar agregar `USER appuser` no privilegiado y permisos correctos sobre `static/uploads` y `static/pdfs`.
 - [ ] **`deploy.yml`** es un placeholder (solo `echo`). Implementar despliegue real cuando se tenga la ruta del proyecto en el VPS, comando de reload de systemd y build del frontend.
 
