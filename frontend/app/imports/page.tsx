@@ -159,7 +159,7 @@ export default function ImportsPage(): React.ReactNode {
                 checked={omitCommonZones}
                 onChange={(e) => setOmitCommonZones(e.target.checked)}
               />
-              Omitir "Zonas comunes" y cargar solo casas
+              Omitir &quot;Zonas comunes&quot; y cargar solo casas
             </label>
 
             <div className="flex flex-wrap items-center gap-3">

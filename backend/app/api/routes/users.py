@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
+import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.deps import get_db, get_current_user, invalidate_user_cache, require_roles
@@ -8,6 +9,8 @@ from app.core.security import hash_password
 from app.schemas import UserCreate, UserUpdate
 from app.services.audit_service import log_audit
 from app.utils.object_id import serialize_doc, to_object_id
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -167,9 +170,20 @@ async def update_user(
 
 
 @router.post('/bootstrap-superadmin')
-async def bootstrap_superadmin(payload: UserCreate, db: AsyncIOMotorDatabase = Depends(get_db)) -> dict:
+async def bootstrap_superadmin(
+    payload: UserCreate,
+    request: Request,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> dict:
     users_count = await db.users.count_documents({})
     if users_count > 0:
+        client_ip = request.client.host if request.client else 'unknown'
+        logger.warning(
+            'Intento de bootstrap-superadmin rechazado (ya existen %d usuarios). IP=%s email=%s',
+            users_count,
+            client_ip,
+            payload.email,
+        )
         raise HTTPException(status_code=403, detail='Bootstrap solo permitido cuando no hay usuarios')
     if payload.rol != 'superadmin':
         raise HTTPException(status_code=400, detail='El bootstrap debe crear un superadmin')
