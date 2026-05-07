@@ -105,7 +105,7 @@ const config: Config = {
       },
       fontFamily: {
         sans: ['var(--font-body)', 'system-ui', 'sans-serif'],
-        display: ['var(--font-title)', 'serif']
+        display: ['var(--font-title)', 'system-ui', 'sans-serif']
       },
       animation: {
         rise: 'rise 0.55s ease-out both',

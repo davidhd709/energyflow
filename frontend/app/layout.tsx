@@ -1,18 +1,23 @@
 import type { Metadata } from 'next';
-import { Lora, Montserrat } from 'next/font/google';
+import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
 
 import './globals.css';
 
-const montserrat = Montserrat({
+// Inter para texto general (lo más usado en SaaS premium: Vercel, Linear, Stripe).
+const inter = Inter({
   subsets: ['latin'],
   variable: '--font-body',
-  weight: ['400', '500', '600', '700', '800', '900']
+  display: 'swap',
+  weight: ['400', '500', '600', '700']
 });
 
-const lora = Lora({
+// Plus Jakarta Sans para títulos / display: también sans-serif, geometría
+// más cálida para crear jerarquía sin volver a serif.
+const jakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
   variable: '--font-title',
-  weight: ['600', '700']
+  display: 'swap',
+  weight: ['500', '600', '700', '800']
 });
 
 export const metadata: Metadata = {
@@ -27,7 +32,9 @@ export default function RootLayout({
 }>): React.ReactNode {
   return (
     <html lang="es">
-      <body className={`${montserrat.variable} ${lora.variable} font-[var(--font-body)] antialiased`}>{children}</body>
+      <body className={`${inter.variable} ${jakarta.variable} font-[var(--font-body)] antialiased`}>
+        {children}
+      </body>
     </html>
   );
 }
