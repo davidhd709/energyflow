@@ -3,6 +3,12 @@
 @tailwind utilities;
 
 :root {
+  /* Una sola familia para toda la app: Inter.
+     --font-title se mantiene apuntando a la misma var del body para que
+     el código existente (font-[var(--font-title)] / font-display) no
+     necesite cambios. */
+  --font-title: var(--font-body);
+
   /* Tokens semánticos */
   --color-bg-base: #f4f7fc;
   --color-surface: #ffffff;

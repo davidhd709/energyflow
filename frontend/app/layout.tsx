@@ -1,23 +1,15 @@
 import type { Metadata } from 'next';
-import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
+import { Inter } from 'next/font/google';
 
 import './globals.css';
 
-// Inter para texto general (lo más usado en SaaS premium: Vercel, Linear, Stripe).
+// Inter para todo — body y títulos. Mismo trazo en toda la app, jerarquía
+// se logra con tamaño y weight (400/500/600/700/800).
 const inter = Inter({
   subsets: ['latin'],
   variable: '--font-body',
   display: 'swap',
-  weight: ['400', '500', '600', '700']
-});
-
-// Plus Jakarta Sans para títulos / display: también sans-serif, geometría
-// más cálida para crear jerarquía sin volver a serif.
-const jakarta = Plus_Jakarta_Sans({
-  subsets: ['latin'],
-  variable: '--font-title',
-  display: 'swap',
-  weight: ['500', '600', '700', '800']
+  weight: ['400', '500', '600', '700', '800']
 });
 
 export const metadata: Metadata = {
@@ -36,9 +28,7 @@ export default function RootLayout({
 }>): React.ReactNode {
   return (
     <html lang="es">
-      <body className={`${inter.variable} ${jakarta.variable} font-[var(--font-body)] antialiased`}>
-        {children}
-      </body>
+      <body className={`${inter.variable} font-[var(--font-body)] antialiased`}>{children}</body>
     </html>
   );
 }
