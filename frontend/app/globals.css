@@ -3,14 +3,30 @@
 @tailwind utilities;
 
 :root {
+  /* Tokens semánticos */
+  --color-bg-base: #f4f7fc;
+  --color-surface: #ffffff;
+  --color-surface-strong: #ffffff;
+  --color-surface-subtle: rgba(255, 255, 255, 0.78);
+  --color-border-soft: rgba(20, 63, 171, 0.12);
+  --color-border-strong: rgba(20, 63, 171, 0.22);
+  --color-text-strong: #0f1f3d;
+  --color-text-soft: #243a64;
+  --color-text-muted: #5a6f95;
+  --color-text-subtle: #8499b9;
+
+  /* Sombras + ring focus */
+  --shadow-soft: 0 22px 50px rgba(16, 58, 124, 0.10);
+  --shadow-card: 0 10px 28px rgba(16, 58, 124, 0.08);
+  --ring-focus: 0 0 0 3px rgba(39, 105, 245, 0.22);
+
+  /* Compat con vars antiguas */
   --bg-soft: radial-gradient(circle at 5% 0%, #dff0ff 0%, #f4f8ff 34%, #f8fbff 100%);
   --surface: rgba(255, 255, 255, 0.82);
   --surface-strong: rgba(255, 255, 255, 0.96);
-  --border-soft: rgba(18, 82, 170, 0.18);
-  --text-main: #113159;
-  --text-muted: #4b6a95;
-  --shadow-soft: 0 22px 50px rgba(16, 58, 124, 0.11);
-  --ring-focus: 0 0 0 3px rgba(37, 129, 245, 0.24);
+  --border-soft: var(--color-border-soft);
+  --text-main: var(--color-text-strong);
+  --text-muted: var(--color-text-muted);
 }
 
 * {
@@ -24,10 +40,16 @@ body {
 
 body {
   margin: 0;
-  background: var(--bg-soft);
-  color: var(--text-main);
-  line-height: 1.45;
+  color: var(--color-text-strong);
+  line-height: 1.5;
+  background-color: var(--color-bg-base);
+  background-image:
+    radial-gradient(ellipse 800px 400px at 0% -10%, rgba(39, 105, 245, 0.10), transparent 60%),
+    radial-gradient(ellipse 600px 400px at 100% 10%, rgba(6, 182, 212, 0.08), transparent 60%),
+    radial-gradient(ellipse 1000px 600px at 50% 100%, rgba(20, 63, 171, 0.05), transparent 60%);
   background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 input,
@@ -41,9 +63,15 @@ input,
 select,
 textarea {
   border-radius: 0.75rem;
-  border: 1px solid var(--border-soft);
-  background: #fff;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+  border: 1px solid var(--color-border-soft);
+  background: #ffffff;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+input:hover:not(:disabled),
+select:hover:not(:disabled),
+textarea:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
 }
 
 input:focus,
@@ -53,42 +81,110 @@ button:focus-visible,
 a:focus-visible {
   outline: none;
   box-shadow: var(--ring-focus);
-  border-color: rgba(24, 112, 231, 0.55);
+  border-color: rgba(39, 105, 245, 0.55);
 }
 
 input::placeholder,
 textarea::placeholder {
-  color: #7d95bb;
+  color: var(--color-text-subtle);
 }
 
+/* Componentes utilitarios */
+
 .glass-card {
-  background: var(--surface);
-  border: 1px solid var(--border-soft);
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-soft);
   box-shadow: var(--shadow-soft);
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
 }
 
 .soft-card {
-  background: var(--surface-strong);
-  border: 1px solid var(--border-soft);
-  box-shadow: 0 10px 28px rgba(16, 58, 124, 0.08);
+  background: #ffffff;
+  border: 1px solid var(--color-border-soft);
+  box-shadow: var(--shadow-card);
+}
+
+.premium-card {
+  position: relative;
+  background: #ffffff;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 1.5rem;
+  box-shadow: 0 1px 2px 0 rgba(13, 31, 71, 0.04), 0 8px 24px -8px rgba(13, 31, 71, 0.10);
+  transition: box-shadow 0.25s ease, transform 0.25s ease, border-color 0.25s ease;
+}
+
+.premium-card:hover {
+  border-color: rgba(39, 105, 245, 0.22);
+  box-shadow: 0 1px 2px 0 rgba(13, 31, 71, 0.04), 0 16px 36px -8px rgba(13, 31, 71, 0.16);
 }
 
 .table-head {
-  background: linear-gradient(92deg, #114e9f 0%, #1671d8 100%);
+  background: linear-gradient(92deg, #143fab 0%, #2769f5 100%);
   color: #fff;
 }
 
+/* Patrón de fondo de grid muy sutil para hero/login */
+.bg-grid-pattern {
+  background-image:
+    linear-gradient(to right, rgba(20, 63, 171, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(20, 63, 171, 0.06) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Skeleton shimmer */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgba(20, 63, 171, 0.08);
+  border-radius: 0.75rem;
+}
+
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.55),
+    transparent
+  );
+  animation: shimmer 1.6s linear infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Scrollbar discreta */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(21, 77, 150, 0.35);
+  background: rgba(20, 63, 171, 0.28);
   border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(20, 63, 171, 0.45);
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(17, 62, 124, 0.07);
+  background: transparent;
+}
+
+/* Focus ring uniforme para clases helper */
+.focus-ring {
+  outline: none;
+}
+.focus-ring:focus-visible {
+  box-shadow: var(--ring-focus);
 }
