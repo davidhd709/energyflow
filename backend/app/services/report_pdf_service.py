@@ -301,12 +301,18 @@ def _house_monthly_html(condominium: dict, period: dict, house: dict, history: l
             """
         )
 
-        photo_src = _image_src(item.get('foto_medidor_url'))
-        photo_html = (
-            f'<img src="{photo_src}" alt="Foto medidor {item.get("mes", "")}" />'
-            if photo_src
-            else '<div class="no-photo">Sin fotografía registrada para este periodo</div>'
-        )
+        raw_photo_url = item.get('foto_medidor_url') or ''
+        photo_src = _image_src(raw_photo_url)
+        if photo_src:
+            photo_html = f'<img src="{photo_src}" alt="Foto medidor {item.get("mes", "")}" />'
+        elif raw_photo_url:
+            # Hay path en DB pero el archivo se perdió en disco — distinto a no subido.
+            photo_html = (
+                '<div class="no-photo">Fotografía registrada en el sistema pero '
+                'no encontrada en el servidor. Re-súbala desde la app de lecturas.</div>'
+            )
+        else:
+            photo_html = '<div class="no-photo">Sin fotografía registrada para este periodo</div>'
         tarifa = _to_float(item.get('tarifa_kwh'))
         cards.append(
             f"""
