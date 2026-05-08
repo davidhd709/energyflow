@@ -83,10 +83,15 @@ async def _build_house_history(
             {
                 'period_id': period_id_str,
                 'mes': _month_label_es(item.get('fecha_fin')),
+                'fecha_inicio': item.get('fecha_inicio'),
+                'fecha_fin': item.get('fecha_fin'),
+                'dias': int(item.get('dias') or 0),
                 'consumo_kwh': float(reading.get('consumo', invoice.get('consumo_kwh', 0))),
+                'tarifa_kwh': float(invoice.get('tarifa_kwh', 0)),
                 'total_factura': float(invoice.get('total', 0)),
                 'lectura_anterior': float(reading.get('lectura_anterior', 0)),
                 'lectura_actual': float(reading.get('lectura_actual', 0)),
+                'foto_medidor_url': reading.get('foto_medidor_url') or '',
             }
         )
 

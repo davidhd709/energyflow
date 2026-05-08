@@ -214,34 +214,85 @@ def build_houses_report_pdf(report: dict) -> bytes:
     return HTML(string=html, base_url=str(BASE_DIR)).write_pdf()
 
 
+def _format_period_range(item: dict) -> str:
+    """Formatea fecha_inicio y fecha_fin del periodo histórico."""
+    from datetime import date as _date, datetime as _datetime
+
+    def _fmt(value: Any) -> str:
+        if value is None:
+            return '-'
+        if isinstance(value, _datetime):
+            return value.strftime('%d/%m/%Y')
+        if isinstance(value, _date):
+            return value.strftime('%d/%m/%Y')
+        if isinstance(value, str):
+            return value[:10] if len(value) >= 10 else value
+        return str(value)
+
+    return f"{_fmt(item.get('fecha_inicio'))} – {_fmt(item.get('fecha_fin'))}"
+
+
 def _house_monthly_html(condominium: dict, period: dict, house: dict, history: list[dict]) -> str:
     max_consumo = max([_to_float(item.get('consumo_kwh')) for item in history], default=1.0)
     max_consumo = max(max_consumo, 1.0)
 
+    nombre_usuario = (house.get('nombre_usuario') or '').strip() or 'Estimado(a) usuario(a)'
+    numero_casa = str(house.get('numero_casa') or '-')
+    intro_text = (
+        f"Sr(a) <strong>{nombre_usuario}</strong>, casa <strong>{numero_casa}</strong>. "
+        f"El siguiente informe corresponde a los consumos de energía que usted ha tenido durante "
+        f"los últimos 6 meses en el condominio <strong>{condominium.get('nombre', '-')}</strong>. "
+        f"En cada periodo encontrará la fotografía del medidor, las lecturas registradas, el consumo "
+        f"calculado, la tarifa aplicada y el valor facturado, para facilitar la verificación y "
+        f"trazabilidad de su facturación."
+    )
+
     bars = []
-    table_rows = []
+    cards = []
     for item in history:
-        width = min(100, (_to_float(item.get('consumo_kwh')) / max_consumo) * 100)
+        consumo = _to_float(item.get('consumo_kwh'))
+        width = min(100, (consumo / max_consumo) * 100)
         bars.append(
             f"""
             <div class="bar-row">
               <div class="bar-label">{item.get('mes', '-')}</div>
               <div class="bar-track"><div class="bar-fill" style="width:{width:.2f}%"></div></div>
-              <div class="bar-value">{_to_float(item.get('consumo_kwh')):.2f} kWh</div>
+              <div class="bar-value">{consumo:,.2f} kWh</div>
             </div>
             """
         )
-        table_rows.append(
+
+        photo_src = _image_src(item.get('foto_medidor_url'))
+        photo_html = (
+            f'<img src="{photo_src}" alt="Foto medidor {item.get("mes", "")}" />'
+            if photo_src
+            else '<div class="no-photo">Sin fotografía registrada para este periodo</div>'
+        )
+        tarifa = _to_float(item.get('tarifa_kwh'))
+        cards.append(
             f"""
-            <tr>
-              <td>{item.get('mes', '-')}</td>
-              <td>{_to_float(item.get('lectura_anterior')):.2f}</td>
-              <td>{_to_float(item.get('lectura_actual')):.2f}</td>
-              <td>{_to_float(item.get('consumo_kwh')):.2f}</td>
-              <td>{_to_currency(item.get('total_factura'))}</td>
-            </tr>
+            <article class="period-card">
+              <header class="period-card__head">
+                <div class="period-card__month">{item.get('mes', '-')}</div>
+                <div class="period-card__range">Periodo facturado: <strong>{_format_period_range(item)}</strong></div>
+              </header>
+              <div class="period-card__body">
+                <div class="period-card__photo">{photo_html}</div>
+                <dl class="period-card__data">
+                  <div><dt>Lectura anterior</dt><dd>{_to_float(item.get('lectura_anterior')):,.2f}</dd></div>
+                  <div><dt>Lectura actual</dt><dd>{_to_float(item.get('lectura_actual')):,.2f}</dd></div>
+                  <div><dt>Consumo del periodo</dt><dd>{consumo:,.2f} kWh</dd></div>
+                  <div><dt>Valor kWh aplicado</dt><dd>{_to_currency(tarifa)}</dd></div>
+                  <div><dt>Días facturados</dt><dd>{int(item.get('dias') or 0)}</dd></div>
+                  <div class="emph"><dt>Valor facturado</dt><dd>{_to_currency(item.get('total_factura'))}</dd></div>
+                </dl>
+              </div>
+            </article>
             """
         )
+
+    bars_html = ''.join(bars) if bars else '<p>No hay datos de consumo para esta casa.</p>'
+    cards_html = ''.join(cards) if cards else '<p>No hay periodos registrados para esta casa.</p>'
 
     return f"""
 <!DOCTYPE html>
@@ -250,56 +301,61 @@ def _house_monthly_html(condominium: dict, period: dict, house: dict, history: l
   <meta charset="UTF-8" />
   <style>
     @page {{ size: A4; margin: 12mm; }}
-    body {{ font-family: Arial, Helvetica, sans-serif; color: #23301a; font-size: 12px; }}
-    .head {{ border-bottom: 2px solid #81943a; padding-bottom: 6px; margin-bottom: 12px; }}
-    h1 {{ margin: 0 0 6px 0; color: #3f5e31; font-size: 24px; }}
-    .meta {{ display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }}
-    .box {{ border: 1px solid #d6dec5; padding: 8px; margin-bottom: 10px; page-break-inside: avoid; }}
-    .title {{ font-size: 15px; font-weight: 700; color: #3f5e31; margin-bottom: 8px; }}
-    .bar-row {{ display: grid; grid-template-columns: 120px 1fr 100px; align-items: center; gap: 8px; margin-bottom: 6px; }}
-    .bar-track {{ height: 16px; border-radius: 8px; overflow: hidden; border: 1px solid #c9d2ad; background: #eff3e6; }}
+    body {{ font-family: Arial, Helvetica, sans-serif; color: #1f2b14; font-size: 12px; line-height: 1.4; }}
+    .head {{ border-bottom: 2px solid #81943a; padding-bottom: 8px; margin-bottom: 14px; }}
+    h1 {{ margin: 0 0 4px 0; color: #3f5e31; font-size: 22px; letter-spacing: .3px; }}
+    .head .sub {{ color: #5b6f3a; font-weight: 700; }}
+    .intro {{ background: #f4f7e8; border: 1px solid #d6dec5; padding: 10px 12px; border-radius: 6px; margin-bottom: 14px; color: #2c3a1c; }}
+    .meta {{ display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; margin-bottom: 14px; font-size: 11.5px; }}
+    .meta div {{ border-bottom: 1px solid #c9d2ad; padding: 3px 0; }}
+    .meta .label {{ color: #3f5e31; font-weight: 700; }}
+    .box {{ border: 1px solid #d6dec5; padding: 10px; margin-bottom: 14px; page-break-inside: avoid; border-radius: 4px; background: #fff; }}
+    .title {{ font-size: 14px; font-weight: 800; color: #3f5e31; margin-bottom: 8px; letter-spacing: .3px; text-transform: uppercase; }}
+    .bar-row {{ display: grid; grid-template-columns: 110px 1fr 100px; align-items: center; gap: 8px; margin-bottom: 6px; }}
+    .bar-label {{ font-weight: 700; color: #3f5e31; font-size: 11.5px; }}
+    .bar-track {{ height: 14px; border-radius: 7px; overflow: hidden; border: 1px solid #c9d2ad; background: #eff3e6; }}
     .bar-fill {{ height: 100%; background: linear-gradient(90deg, #8ea73a, #b7c85b); }}
-    .bar-value {{ text-align: right; font-weight: 700; }}
-    table {{ width: 100%; border-collapse: collapse; }}
-    th, td {{ border: 1px solid #c7cfb3; padding: 6px; font-size: 11px; }}
-    th {{ background: #e8eddc; color: #3f5e31; text-align: left; }}
+    .bar-value {{ text-align: right; font-weight: 700; font-size: 11.5px; }}
+
+    .period-card {{ border: 1.5px solid #b7c85b; border-radius: 8px; margin-bottom: 12px; padding: 10px 12px; background: #fff; page-break-inside: avoid; }}
+    .period-card__head {{ display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed #c9d2ad; }}
+    .period-card__month {{ font-size: 14px; font-weight: 800; color: #3f5e31; text-transform: uppercase; letter-spacing: .4px; }}
+    .period-card__range {{ font-size: 11px; color: #5b6f3a; }}
+    .period-card__body {{ display: grid; grid-template-columns: 120px 1fr; gap: 12px; align-items: stretch; }}
+    .period-card__photo {{ width: 120px; height: 120px; border: 2px solid #889a37; border-radius: 6px; overflow: hidden; background: #f3f4ea; display: flex; align-items: center; justify-content: center; }}
+    .period-card__photo img {{ width: 100%; height: 100%; object-fit: contain; }}
+    .period-card__photo .no-photo {{ font-size: 10px; color: #6b7c44; text-align: center; padding: 6px; }}
+    .period-card__data {{ display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; margin: 0; }}
+    .period-card__data > div {{ display: flex; justify-content: space-between; gap: 6px; padding: 3px 0; border-bottom: 1px solid #e3ead0; font-size: 11.5px; }}
+    .period-card__data dt {{ color: #5b6f3a; font-weight: 600; margin: 0; }}
+    .period-card__data dd {{ color: #1f2b14; font-weight: 700; margin: 0; text-align: right; font-variant-numeric: tabular-nums; }}
+    .period-card__data .emph {{ background: #f4f7e8; padding: 4px 6px; border-radius: 4px; border: 1px solid #b7c85b; }}
+    .period-card__data .emph dt {{ color: #3f5e31; }}
+    .period-card__data .emph dd {{ color: #2f4222; font-size: 13px; }}
   </style>
 </head>
 <body>
   <div class="head">
-    <h1>REPORTE INDIVIDUAL DE ENERGIA</h1>
-    <div>{condominium.get('nombre', '-')}</div>
+    <h1>INFORME INDIVIDUAL DE CONSUMO</h1>
+    <div class="sub">{condominium.get('nombre', '-')}</div>
   </div>
+
+  <p class="intro">{intro_text}</p>
 
   <div class="meta">
-    <div>Casa: {house.get('numero_casa', '-')}</div>
-    <div>Usuario: {house.get('nombre_usuario', '-') or '-'}</div>
-    <div>Serie medidor: {house.get('serie_medidor', '-')}</div>
-    <div>Periodo de referencia: {period.get('fecha_inicio', '-')} al {period.get('fecha_fin', '-')}</div>
+    <div><span class="label">Casa:</span> {numero_casa}</div>
+    <div><span class="label">Usuario:</span> {nombre_usuario}</div>
+    <div><span class="label">Serie medidor:</span> {house.get('serie_medidor', '-')}</div>
+    <div><span class="label">Ubicación:</span> {house.get('ubicacion', '-') or '-'}</div>
   </div>
 
   <div class="box">
-    <div class="title">Consumo mensual (ultimos 6 meses)</div>
-    {''.join(bars) if bars else '<p>No hay datos de consumo para esta casa.</p>'}
+    <div class="title">Consumo mensual (últimos 6 meses)</div>
+    {bars_html}
   </div>
 
-  <div class="box">
-    <div class="title">Detalle mensual</div>
-    <table>
-      <thead>
-        <tr>
-          <th>Mes</th>
-          <th>Lectura anterior</th>
-          <th>Lectura actual</th>
-          <th>Consumo kWh</th>
-          <th>Total factura</th>
-        </tr>
-      </thead>
-      <tbody>
-        {''.join(table_rows) if table_rows else '<tr><td colspan="5">Sin datos.</td></tr>'}
-      </tbody>
-    </table>
-  </div>
+  <div class="title" style="margin: 8px 0 8px;">Detalle por periodo</div>
+  {cards_html}
 </body>
 </html>
 """

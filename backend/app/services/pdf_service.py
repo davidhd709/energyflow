@@ -101,8 +101,10 @@ def invoice_html(invoice: dict, house: dict, period: dict, condominium: dict) ->
     energia = _to_float(invoice.get('valor_energia'))
     alumbrado = _to_float(invoice.get('valor_alumbrado'))
     aseo = _to_float(invoice.get('valor_aseo'))
+    saldo_anterior = _to_float(invoice.get('saldo_anterior'))
     subtotal = energia + alumbrado + aseo
     total = _to_float(invoice.get('total'))
+    total_a_pagar = _to_float(invoice.get('total_a_pagar')) or (total + saldo_anterior)
     consumo = _to_float(invoice.get('consumo_kwh'))
     tarifa = _to_float(invoice.get('tarifa_kwh'))
     lectura_actual = _to_float(invoice.get('lectura_actual'))
@@ -112,6 +114,8 @@ def invoice_html(invoice: dict, house: dict, period: dict, condominium: dict) ->
     meter_photo_src = _image_src(invoice.get('foto_medidor_url'))
     fecha_inicio = _date_ddmmyyyy(period.get('fecha_inicio'))
     fecha_fin = _date_ddmmyyyy(period.get('fecha_fin'))
+    fecha_limite_pago_raw = invoice.get('fecha_limite_pago')
+    fecha_limite_pago = _date_ddmmyyyy(fecha_limite_pago_raw) if fecha_limite_pago_raw else fecha_fin
     dias = invoice.get('dias_facturados', period.get('dias', 0))
 
     return f"""
@@ -392,9 +396,9 @@ def invoice_html(invoice: dict, house: dict, period: dict, condominium: dict) ->
       <div class="item"><span class="label">USUARIO:</span><span class="value">{invoice.get('nombre_usuario', f"CASA {house.get('numero_casa', '-')}")}</span></div>
       <div class="item"><span class="label">FACTURA NO.</span><span class="value">{invoice.get('numero_factura', '-')}</span></div>
       <div class="item"><span class="label">DIRECCION:</span><span class="value">{invoice.get('direccion_factura', f"CASA {house.get('numero_casa', '-')}")}</span></div>
-      <div class="item"><span class="label">FECHA OPORTUNA DE PAGO</span><span class="value">{fecha_fin}</span></div>
+      <div class="item"><span class="label">FECHA LIMITE DE PAGO</span><span class="value">{fecha_limite_pago}</span></div>
       <div></div>
-      <div class="item"><span class="label">TOTAL A PAGAR</span><span class="value">{_currency(total)}</span></div>
+      <div class="item"><span class="label">TOTAL A PAGAR</span><span class="value">{_currency(total_a_pagar)}</span></div>
     </div>
 
     <div class="rows">
@@ -403,12 +407,8 @@ def invoice_html(invoice: dict, house: dict, period: dict, condominium: dict) ->
         <div class="c">Serie Medidor : <span class="v">{house.get('serie_medidor', '-')}</span></div>
       </div>
       <div class="r">
-        <div class="c">Numero de facturas vencidas : <span class="v">0</span></div>
-        <div class="c">Monto : <span class="v">0</span></div>
-      </div>
-      <div class="r">
-        <div class="c">Fecha Ultimo Pago : <span class="v">-</span></div>
-        <div class="c">Monto : <span class="v">$</span></div>
+        <div class="c">Saldo anterior : <span class="v">{_currency(saldo_anterior)}</span></div>
+        <div class="c">Total periodo actual : <span class="v">{_currency(total)}</span></div>
       </div>
       <div class="r">
         <div class="c">Lectura Actual : <span class="v">{lectura_actual:,.2f}</span></div>
@@ -451,20 +451,20 @@ def invoice_html(invoice: dict, house: dict, period: dict, condominium: dict) ->
         <td>{_currency(energia)}</td>
       </tr>
       <tr>
-        <td>Mes anterior</td>
-        <td>$0.00</td>
-      </tr>
-      <tr>
         <td>Impuesto Alumbrado Publico 15%</td>
         <td>{_currency(alumbrado)}</td>
       </tr>
       <tr class="em">
-        <td>SUBTOTAL</td>
+        <td>SUBTOTAL DEL PERIODO</td>
         <td>{_currency(subtotal)}</td>
+      </tr>
+      <tr>
+        <td>Saldo anterior pendiente</td>
+        <td>{_currency(saldo_anterior)}</td>
       </tr>
       <tr class="final">
         <td>TOTAL A PAGAR</td>
-        <td>{_currency(total)}</td>
+        <td>{_currency(total_a_pagar)}</td>
       </tr>
     </table>
 

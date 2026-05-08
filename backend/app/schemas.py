@@ -104,6 +104,10 @@ class SupplierInvoiceUpsert(BaseModel):
     total_factura: float = Field(..., ge=0)
 
 
+class HouseInvoiceSaldoUpdate(BaseModel):
+    saldo_anterior: float = Field(..., ge=0)
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = 'bearer'

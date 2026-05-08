@@ -96,13 +96,22 @@ async def calculate_billing(
     porcentaje_alumbrado = float(condominium.get('porcentaje_alumbrado', 15.0))
     valor_aseo = float(supplier_invoice.get('valor_aseo', 0))
 
+    # Indexamos las facturas existentes por house_id para preservar el
+    # `saldo_anterior` que el operador pudo haber capturado antes de un
+    # recálculo. No queremos perderlo al recalcular.
+    existing_invoices = await db.house_invoices.find(
+        {'billing_period_id': period_obj_id}
+    ).to_list(length=None)
+    existing_by_house = {str(item['house_id']): item for item in existing_invoices}
+
     now = datetime.now(timezone.utc)
-    house_invoice_docs: list[dict[str, Any]] = []
     warnings_sin_consumo: list[str] = []
 
     total_energia = 0.0
     total_impuesto = 0.0
     total_facturado = 0.0
+
+    house_ids_processed: list = []
 
     for house in houses:
         reading = reading_map[str(house['_id'])]
@@ -125,30 +134,49 @@ async def calculate_billing(
         if house.get('es_zona_comun', False):
             total = _round2(subtotal + valor_aseo)
 
-        house_invoice_docs.append(
-            {
-                'billing_period_id': period_obj_id,
-                'house_id': house['_id'],
-                'consumo_kwh': _round2(consumo),
-                'tarifa_kwh': _round2(tarifa_kwh),
-                'valor_energia': valor_energia,
-                'valor_alumbrado': valor_alumbrado,
-                'valor_aseo': _round2(valor_aseo) if house.get('es_zona_comun', False) else 0.0,
-                'total': total,
+        existing = existing_by_house.get(str(house['_id']))
+        saldo_anterior = _round2(float((existing or {}).get('saldo_anterior') or 0))
+
+        update_doc = {
+            'billing_period_id': period_obj_id,
+            'house_id': house['_id'],
+            'consumo_kwh': _round2(consumo),
+            'tarifa_kwh': _round2(tarifa_kwh),
+            'valor_energia': valor_energia,
+            'valor_alumbrado': valor_alumbrado,
+            'valor_aseo': _round2(valor_aseo) if house.get('es_zona_comun', False) else 0.0,
+            'total': total,
+            'saldo_anterior': saldo_anterior,
+            'total_a_pagar': _round2(total + saldo_anterior),
+            'updated_at': now,
+        }
+
+        if existing:
+            await db.house_invoices.update_one(
+                {'_id': existing['_id']},
+                {'$set': update_doc},
+            )
+        else:
+            update_doc.update({
                 'pdf_url': None,
                 'estado_entrega': 'pendiente',
+                'fecha_limite_pago': None,
+                'fecha_pdf_generado': None,
                 'created_at': now,
-                'updated_at': now,
-            }
-        )
+            })
+            await db.house_invoices.insert_one(update_doc)
 
+        house_ids_processed.append(house['_id'])
         total_energia += valor_energia
         total_impuesto += valor_alumbrado
         total_facturado += total
 
-    await db.house_invoices.delete_many({'billing_period_id': period_obj_id})
-    if house_invoice_docs:
-        await db.house_invoices.insert_many(house_invoice_docs)
+    # Limpiar facturas huérfanas (casas que ya no aplican).
+    if house_ids_processed:
+        await db.house_invoices.delete_many({
+            'billing_period_id': period_obj_id,
+            'house_id': {'$nin': house_ids_processed},
+        })
 
     await db.supplier_invoices.update_one(
         {'_id': supplier_invoice['_id']},

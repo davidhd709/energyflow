@@ -7,6 +7,7 @@ import AppShell from '@/components/AppShell';
 import AuthGuard from '@/components/AuthGuard';
 import MetricCard from '@/components/MetricCard';
 import TableBlock from '@/components/TableBlock';
+import { Badge, Button, PageContainer, SectionHeader, StatusBadge } from '@/components/ui';
 import { useCondominiumScope } from '@/hooks/useCondominiumScope';
 import { useSession } from '@/hooks/useSession';
 import { apiFetch } from '@/lib/api';
@@ -28,8 +29,11 @@ type HouseInvoice = {
   house_id: string;
   consumo_kwh: number;
   total: number;
+  saldo_anterior?: number;
+  total_a_pagar?: number;
   pdf_url: string | null;
   estado_entrega: string;
+  fecha_limite_pago?: string | null;
 };
 
 const slug = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]+/g, '');
@@ -45,6 +49,13 @@ const houseSuffix = (numeroCasa: string): string => {
   return cleaned || 'sinid';
 };
 
+const formatDate = (iso?: string | null): string => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('es-CO');
+};
+
 export default function PdfsPage(): React.ReactNode {
   const { session } = useSession();
   const role = session?.user.rol;
@@ -56,6 +67,10 @@ export default function PdfsPage(): React.ReactNode {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loadingAction, setLoadingAction] = useState(false);
+
+  // Saldos en edición (estado local antes de hacer PATCH).
+  const [saldoDrafts, setSaldoDrafts] = useState<Record<string, string>>({});
+  const [savingSaldoId, setSavingSaldoId] = useState<string | null>(null);
 
   const { condominiums, selectedCondominiumId, setSelectedCondominiumId, queryParam, ready } = useCondominiumScope(session);
 
@@ -73,9 +88,51 @@ export default function PdfsPage(): React.ReactNode {
   useEffect(() => {
     if (!selectedPeriod) return;
     apiFetch<HouseInvoice[]>(`/billing/${selectedPeriod}/house-invoices`)
-      .then(setInvoices)
+      .then((data) => {
+        setInvoices(data);
+        // Sincroniza drafts con valores del backend.
+        const drafts: Record<string, string> = {};
+        for (const inv of data) {
+          drafts[inv._id] = String(inv.saldo_anterior ?? 0);
+        }
+        setSaldoDrafts(drafts);
+      })
       .catch(() => setInvoices([]));
   }, [selectedPeriod]);
+
+  const reloadInvoices = async (): Promise<void> => {
+    const updated = await apiFetch<HouseInvoice[]>(`/billing/${selectedPeriod}/house-invoices`);
+    setInvoices(updated);
+    const drafts: Record<string, string> = {};
+    for (const inv of updated) {
+      drafts[inv._id] = String(inv.saldo_anterior ?? 0);
+    }
+    setSaldoDrafts(drafts);
+  };
+
+  const saveSaldo = async (invoiceId: string): Promise<void> => {
+    const raw = saldoDrafts[invoiceId];
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < 0) {
+      setError('Saldo anterior inválido. Debe ser un número mayor o igual a 0.');
+      return;
+    }
+    setSavingSaldoId(invoiceId);
+    setError('');
+    setSuccess('');
+    try {
+      await apiFetch(`/billing/house-invoices/${invoiceId}/saldo-anterior`, {
+        method: 'PATCH',
+        body: JSON.stringify({ saldo_anterior: value })
+      });
+      await reloadInvoices();
+      setSuccess('Saldo anterior actualizado.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo guardar el saldo anterior.');
+    } finally {
+      setSavingSaldoId(null);
+    }
+  };
 
   const generateOne = async (invoiceId: string): Promise<void> => {
     setLoadingAction(true);
@@ -85,8 +142,7 @@ export default function PdfsPage(): React.ReactNode {
       await apiFetch(`/billing/house-invoices/${invoiceId}/generate-pdf`, {
         method: 'POST'
       });
-      const updated = await apiFetch<HouseInvoice[]>(`/billing/${selectedPeriod}/house-invoices`);
-      setInvoices(updated);
+      await reloadInvoices();
       setSuccess('Factura PDF generada con éxito.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo generar el PDF.');
@@ -101,8 +157,7 @@ export default function PdfsPage(): React.ReactNode {
     setSuccess('');
     try {
       await apiFetch(`/billing/${selectedPeriod}/generate-all-pdfs`, { method: 'POST' });
-      const updated = await apiFetch<HouseInvoice[]>(`/billing/${selectedPeriod}/house-invoices`);
-      setInvoices(updated);
+      await reloadInvoices();
       setSuccess('Todas las facturas PDF se generaron correctamente.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudieron generar los PDFs.');
@@ -135,17 +190,31 @@ export default function PdfsPage(): React.ReactNode {
   };
 
   const generatedCount = invoices.filter((item) => item.estado_entrega === 'generado').length;
-  const pendingCount = invoices.length - generatedCount;
-  const totalInvoiced = invoices.reduce((acc, item) => acc + Number(item.total || 0), 0);
+  const totalInvoiced = invoices.reduce(
+    (acc, item) => acc + Number(item.total_a_pagar ?? item.total ?? 0),
+    0
+  );
+  const totalSaldoPendiente = invoices.reduce(
+    (acc, item) => acc + Number(item.saldo_anterior ?? 0),
+    0
+  );
 
   return (
     <AuthGuard allowedRoles={['superadmin', 'admin', 'operador']}>
       <AppShell>
-        <section className="space-y-6">
-          <header>
-            <h2 className="font-[var(--font-title)] text-3xl text-pine-900">Facturación PDF por Casa</h2>
-            <p className="mt-1 text-sm text-pine-700">Genera y descarga recibos individuales con trazabilidad por periodo.</p>
-          </header>
+        <PageContainer>
+          <SectionHeader
+            eyebrow="Facturación"
+            title="Facturas PDF por casa"
+            description="Captura saldos pendientes, genera y descarga recibos individuales con trazabilidad por periodo."
+            actions={
+              canGenerate ? (
+                <Button onClick={generateAll} loading={loadingAction} disabled={!selectedPeriod || invoices.length === 0}>
+                  Generar todos los PDFs
+                </Button>
+              ) : null
+            }
+          />
 
           <ActionFeedback
             loading={loadingAction}
@@ -154,17 +223,17 @@ export default function PdfsPage(): React.ReactNode {
             error={error}
           />
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard title="Facturas del periodo" value={invoices.length} />
             <MetricCard title="Generadas" value={generatedCount} />
-            <MetricCard title="Pendientes" value={pendingCount} />
-            <MetricCard title="Total facturado" value={toCurrency(totalInvoiced)} />
+            <MetricCard title="Saldos pendientes" value={toCurrency(totalSaldoPendiente)} helper="Suma de saldos anteriores" />
+            <MetricCard title="Total a pagar" value={toCurrency(totalInvoiced)} helper="Incluye saldo anterior" />
           </div>
 
-          <div className="soft-card rounded-2xl p-4 sm:p-5">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
+          <div className="rounded-2xl border border-border-soft bg-white p-5 shadow-elevation-1">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] xl:items-end">
               {role === 'superadmin' ? (
-                <label className="text-sm text-pine-700">
+                <label className="block text-sm font-medium text-ink-soft">
                   Condominio
                   <select className="mt-1 w-full rounded-xl px-3 py-2.5" value={selectedCondominiumId} onChange={(e) => setSelectedCondominiumId(e.target.value)}>
                     {condominiums.map((condo) => (
@@ -176,7 +245,7 @@ export default function PdfsPage(): React.ReactNode {
                 </label>
               ) : null}
 
-              <label className="text-sm text-pine-700">
+              <label className="block text-sm font-medium text-ink-soft">
                 Periodo
                 <select className="mt-1 w-full rounded-xl px-3 py-2.5" value={selectedPeriod} onChange={(e) => setSelectedPeriod(e.target.value)}>
                   {periods.map((period) => (
@@ -187,44 +256,65 @@ export default function PdfsPage(): React.ReactNode {
                 </select>
               </label>
 
-              {canGenerate ? (
-                <button className="rounded-xl bg-pine-700 px-4 py-2.5 font-semibold text-white" onClick={generateAll}>
-                  {loadingAction ? 'Generando...' : 'Generar todos los PDFs'}
-                </button>
-              ) : null}
+              <Badge tone="neutral">
+                {invoices.length} {invoices.length === 1 ? 'factura' : 'facturas'}
+              </Badge>
             </div>
           </div>
 
           <TableBlock
-            columns={['Casa', 'Consumo', 'Total', 'Estado', 'Acciones']}
-            rows={invoices.map((invoice) => ({
-              Casa: houseById[invoice.house_id] || invoice.house_id,
-              Consumo: `${toNumber(invoice.consumo_kwh)} kWh`,
-              Total: toCurrency(invoice.total),
-              Estado: invoice.estado_entrega,
-              Acciones: (
-                <div className="flex gap-2">
-                  {canGenerate ? (
-                    <button className="rounded-xl bg-pine-700 px-2.5 py-1.5 text-xs font-semibold text-white" onClick={() => generateOne(invoice._id)} disabled={loadingAction}>
-                      Generar
-                    </button>
-                  ) : null}
-                  {invoice.pdf_url ? (
-                    <button
-                      className="rounded-xl bg-olive px-2.5 py-1.5 text-xs font-semibold text-white"
-                      onClick={() => downloadOne(invoice)}
-                      disabled={loadingAction}
-                    >
-                      Descargar
-                    </button>
-                  ) : (
-                    <span>-</span>
-                  )}
-                </div>
-              )
-            }))}
+            columns={
+              canGenerate
+                ? ['Casa', 'Consumo', 'Total periodo', 'Saldo anterior', 'Total a pagar', 'Vence', 'Estado', 'Acciones']
+                : ['Casa', 'Consumo', 'Total periodo', 'Saldo anterior', 'Total a pagar', 'Vence', 'Estado', 'Acciones']
+            }
+            rows={invoices.map((invoice) => {
+              const draft = saldoDrafts[invoice._id] ?? '0';
+              const totalPagar = Number(invoice.total_a_pagar ?? invoice.total ?? 0);
+              const isSaving = savingSaldoId === invoice._id;
+              return {
+                Casa: <span className="font-semibold text-ink">{houseById[invoice.house_id] || invoice.house_id}</span>,
+                Consumo: `${toNumber(invoice.consumo_kwh)} kWh`,
+                'Total periodo': toCurrency(invoice.total),
+                'Saldo anterior': canGenerate ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      value={draft}
+                      onChange={(e) => setSaldoDrafts((prev) => ({ ...prev, [invoice._id]: e.target.value }))}
+                      className="w-28 rounded-lg border border-border-soft px-2.5 py-1.5 text-sm"
+                      disabled={isSaving}
+                    />
+                    <Button size="sm" variant="secondary" onClick={() => saveSaldo(invoice._id)} loading={isSaving} disabled={isSaving || draft === String(invoice.saldo_anterior ?? 0)}>
+                      Guardar
+                    </Button>
+                  </div>
+                ) : (
+                  toCurrency(invoice.saldo_anterior ?? 0)
+                ),
+                'Total a pagar': <span className="font-semibold text-brand-800">{toCurrency(totalPagar)}</span>,
+                Vence: formatDate(invoice.fecha_limite_pago),
+                Estado: <StatusBadge status={invoice.estado_entrega || 'pendiente'} />,
+                Acciones: (
+                  <div className="flex gap-2">
+                    {canGenerate ? (
+                      <Button size="sm" onClick={() => generateOne(invoice._id)} disabled={loadingAction}>
+                        Generar
+                      </Button>
+                    ) : null}
+                    {invoice.pdf_url ? (
+                      <Button size="sm" variant="secondary" onClick={() => downloadOne(invoice)} disabled={loadingAction}>
+                        Descargar
+                      </Button>
+                    ) : null}
+                  </div>
+                )
+              };
+            })}
           />
-        </section>
+        </PageContainer>
       </AppShell>
     </AuthGuard>
   );
