@@ -57,11 +57,11 @@ async def _build_house_history(
     if not house:
         raise HTTPException(status_code=404, detail='Casa no encontrada en el condominio del periodo')
 
+    # Tomamos siempre los 6 periodos más recientes del condominio,
+    # independientemente del periodo seleccionado como referencia. Así el
+    # informe siempre incluye las lecturas y fotos más actuales disponibles.
     periods = await db.billing_periods.find(
-        {
-            'condominium_id': period['condominium_id'],
-            'fecha_fin': {'$lte': period['fecha_fin']},
-        }
+        {'condominium_id': period['condominium_id']}
     ).sort('fecha_fin', -1).to_list(length=6)
 
     if not periods:
