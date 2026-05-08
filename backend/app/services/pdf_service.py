@@ -131,7 +131,7 @@ def invoice_html(invoice: dict, house: dict, period: dict, condominium: dict) ->
     * {{ box-sizing: border-box; }}
     body {{
       margin: 0;
-      font-family: Arial, Helvetica, sans-serif;
+      font-family: "DejaVu Sans", "Liberation Sans", "Helvetica Neue", Arial, sans-serif;
       color: #1f2b14;
       background: #ecebe6;
       font-size: 12px;

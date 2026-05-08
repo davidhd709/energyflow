@@ -1,4 +1,5 @@
 import base64
+import logging
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -6,6 +7,7 @@ from urllib.parse import urlparse
 from fastapi import HTTPException
 
 BASE_DIR = Path(__file__).resolve().parents[2]
+logger = logging.getLogger(__name__)
 
 
 def _to_float(value: Any) -> float:
@@ -19,22 +21,55 @@ def _to_currency(value: Any) -> str:
     return f"${_to_float(value):,.2f}"
 
 
+def _resolve_static_path(static_url: str) -> Path | None:
+    """Convierte una URL/relativa de static a un Path local existente.
+
+    Acepta variantes: con/sin prefijo http(s), con/sin '/static/', rutas
+    relativas, y trim de query string. Retorna None si no encuentra archivo.
+    """
+    if not static_url:
+        return None
+
+    # Quita query string si viene
+    raw = static_url.split('?', 1)[0].strip()
+    if not raw:
+        return None
+
+    # Si vino como URL absoluta, deja sólo el path.
+    if raw.startswith(('http://', 'https://')):
+        parsed = urlparse(raw)
+        raw = parsed.path or ''
+
+    # Normaliza prefijo
+    rel = raw.lstrip('/')
+
+    # Candidatos de ruta a probar.
+    candidates = []
+    if rel.startswith('static/'):
+        candidates.append(BASE_DIR / rel)
+    else:
+        candidates.append(BASE_DIR / 'static' / rel)
+        candidates.append(BASE_DIR / rel)
+
+    for path in candidates:
+        try:
+            if path.exists() and path.is_file():
+                return path
+        except OSError:
+            continue
+
+    return None
+
+
 def _image_src(static_url: str | None) -> str:
     if not static_url:
         return ''
     if static_url.startswith(('data:', 'file://')):
         return static_url
 
-    normalized = static_url
-    if static_url.startswith(('http://', 'https://')):
-        parsed = urlparse(static_url)
-        normalized = parsed.path or ''
-
-    if not normalized.startswith('/static/'):
-        return ''
-
-    local_path = BASE_DIR / normalized.lstrip('/')
-    if not local_path.exists():
+    local_path = _resolve_static_path(static_url)
+    if local_path is None:
+        logger.warning('No se pudo resolver imagen para PDF: %s', static_url)
         return ''
 
     ext = local_path.suffix.lower()
@@ -45,7 +80,11 @@ def _image_src(static_url: str | None) -> str:
         '.webp': 'image/webp',
     }.get(ext, 'application/octet-stream')
 
-    payload = base64.b64encode(local_path.read_bytes()).decode('ascii')
+    try:
+        payload = base64.b64encode(local_path.read_bytes()).decode('ascii')
+    except OSError as exc:
+        logger.warning('No se pudo leer imagen %s: %s', local_path, exc)
+        return ''
     return f'data:{mime};base64,{payload}'
 
 
@@ -130,7 +169,7 @@ def _report_html(report: dict, chart_rows: list[dict]) -> str:
   <meta charset="UTF-8" />
   <style>
     @page {{ size: A4; margin: 12mm; }}
-    body {{ font-family: Arial, Helvetica, sans-serif; color: #23301a; font-size: 12px; }}
+    body {{ font-family: "DejaVu Sans", "Liberation Sans", "Helvetica Neue", Arial, sans-serif; color: #23301a; font-size: 12px; }}
     h1 {{ margin: 0 0 6px 0; color: #3f5e31; font-size: 28px; }}
     .head {{ border-bottom: 2px solid #81943a; padding-bottom: 6px; margin-bottom: 10px; }}
     .meta {{ display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 12px; margin-bottom: 10px; }}
@@ -301,7 +340,7 @@ def _house_monthly_html(condominium: dict, period: dict, house: dict, history: l
   <meta charset="UTF-8" />
   <style>
     @page {{ size: A4; margin: 12mm; }}
-    body {{ font-family: Arial, Helvetica, sans-serif; color: #1f2b14; font-size: 12px; line-height: 1.4; }}
+    body {{ font-family: "DejaVu Sans", "Liberation Sans", "Helvetica Neue", Arial, sans-serif; color: #1f2b14; font-size: 12px; line-height: 1.4; }}
     .head {{ border-bottom: 2px solid #81943a; padding-bottom: 8px; margin-bottom: 14px; }}
     h1 {{ margin: 0 0 4px 0; color: #3f5e31; font-size: 22px; letter-spacing: .3px; }}
     .head .sub {{ color: #5b6f3a; font-weight: 700; }}
@@ -321,10 +360,10 @@ def _house_monthly_html(condominium: dict, period: dict, house: dict, history: l
     .period-card__head {{ display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed #c9d2ad; }}
     .period-card__month {{ font-size: 14px; font-weight: 800; color: #3f5e31; text-transform: uppercase; letter-spacing: .4px; }}
     .period-card__range {{ font-size: 11px; color: #5b6f3a; }}
-    .period-card__body {{ display: grid; grid-template-columns: 120px 1fr; gap: 12px; align-items: stretch; }}
-    .period-card__photo {{ width: 120px; height: 120px; border: 2px solid #889a37; border-radius: 6px; overflow: hidden; background: #f3f4ea; display: flex; align-items: center; justify-content: center; }}
+    .period-card__body {{ display: grid; grid-template-columns: 180px 1fr; gap: 14px; align-items: stretch; }}
+    .period-card__photo {{ width: 180px; height: 180px; border: 2px solid #889a37; border-radius: 8px; overflow: hidden; background: #f3f4ea; display: flex; align-items: center; justify-content: center; }}
     .period-card__photo img {{ width: 100%; height: 100%; object-fit: contain; }}
-    .period-card__photo .no-photo {{ font-size: 10px; color: #6b7c44; text-align: center; padding: 6px; }}
+    .period-card__photo .no-photo {{ font-size: 11px; color: #6b7c44; text-align: center; padding: 10px; line-height: 1.3; }}
     .period-card__data {{ display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; margin: 0; }}
     .period-card__data > div {{ display: flex; justify-content: space-between; gap: 6px; padding: 3px 0; border-bottom: 1px solid #e3ead0; font-size: 11.5px; }}
     .period-card__data dt {{ color: #5b6f3a; font-weight: 600; margin: 0; }}
